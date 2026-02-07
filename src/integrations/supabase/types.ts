@@ -142,6 +142,7 @@ export type Database = {
           partner_reference_no: string
           payment_code: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
+          payment_url: string | null
           qr_content: string | null
           status: Database["public"]["Enums"]["transaction_status"] | null
           total_amount: number
@@ -165,6 +166,7 @@ export type Database = {
           partner_reference_no: string
           payment_code?: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
+          payment_url?: string | null
           qr_content?: string | null
           status?: Database["public"]["Enums"]["transaction_status"] | null
           total_amount: number
@@ -188,12 +190,46 @@ export type Database = {
           partner_reference_no?: string
           payment_code?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
+          payment_url?: string | null
           qr_content?: string | null
           status?: Database["public"]["Enums"]["transaction_status"] | null
           total_amount?: number
           updated_at?: string | null
           user_id?: string | null
           va_number?: string | null
+        }
+        Relationships: []
+      }
+      user_api_settings: {
+        Row: {
+          api_key: string
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          updated_at: string | null
+          user_id: string
+          webhook_secret: string | null
+          webhook_url: string | null
+        }
+        Insert: {
+          api_key?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          updated_at?: string | null
+          user_id: string
+          webhook_secret?: string | null
+          webhook_url?: string | null
+        }
+        Update: {
+          api_key?: string
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+          webhook_secret?: string | null
+          webhook_url?: string | null
         }
         Relationships: []
       }

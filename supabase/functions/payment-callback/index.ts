@@ -67,14 +67,38 @@ serve(async (req) => {
       });
     }
 
+    // Find the transaction first
+    let transaction = null;
+    let referenceNo = data.referenceNo || data.partnerReferenceNo || data.partner_reff;
+
+    if (referenceNo) {
+      const { data: txData, error: txError } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('partner_reference_no', referenceNo)
+        .single();
+
+      if (!txError && txData) {
+        transaction = txData;
+      }
+    }
+
+    // Determine the status
+    let newStatus = 'paid';
+    if (data.payment_status === 'EXPIRED' || data.status === 'expired') {
+      newStatus = 'expired';
+    } else if (data.payment_status === 'FAILED' || data.status === 'failed') {
+      newStatus = 'failed';
+    }
+
     // Handle QRIS callback
     if (data.transactionID && data.referenceNo) {
       const { error } = await supabase
         .from('transactions')
         .update({
-          status: 'paid',
+          status: newStatus,
           external_id: data.transactionID,
-          paid_at: new Date().toISOString(),
+          paid_at: newStatus === 'paid' ? new Date().toISOString() : null,
           callback_data: data,
         })
         .eq('partner_reference_no', data.referenceNo);
@@ -83,18 +107,80 @@ serve(async (req) => {
     }
 
     // Handle VA/Retail callback
-    if (data.partnerReferenceNo && data.payment_status === 'PAID') {
+    if (data.partnerReferenceNo) {
+      const isPaid = data.payment_status === 'PAID' || data.status === 'paid' || data.status === 'success';
       const { error } = await supabase
         .from('transactions')
         .update({
-          status: 'paid',
+          status: isPaid ? 'paid' : newStatus,
           external_id: data.external_id,
-          paid_at: new Date().toISOString(),
+          paid_at: isPaid ? new Date().toISOString() : null,
           callback_data: data,
         })
         .eq('partner_reference_no', data.partnerReferenceNo);
 
       if (error) console.error('Update error:', error);
+    }
+
+    // Forward webhook to user if transaction has user_id
+    if (transaction && transaction.user_id) {
+      const { data: userApiSettings } = await supabase
+        .from('user_api_settings')
+        .select('*')
+        .eq('user_id', transaction.user_id)
+        .eq('is_active', true)
+        .single();
+
+      if (userApiSettings?.webhook_url) {
+        try {
+          const webhookPayload = {
+            event: newStatus === 'paid' ? 'payment.success' : `payment.${newStatus}`,
+            data: {
+              transaction_id: transaction.id,
+              reference_no: transaction.partner_reference_no,
+              amount: transaction.amount,
+              admin_fee: transaction.admin_fee,
+              total_amount: transaction.total_amount,
+              payment_method: transaction.payment_method,
+              channel_code: transaction.channel_code,
+              customer_name: transaction.customer_name,
+              customer_email: transaction.customer_email,
+              status: newStatus,
+              paid_at: newStatus === 'paid' ? new Date().toISOString() : null,
+            },
+            timestamp: new Date().toISOString(),
+          };
+
+          // Generate signature using webhook secret
+          const encoder = new TextEncoder();
+          const payloadString = JSON.stringify(webhookPayload);
+          const key = await crypto.subtle.importKey(
+            "raw",
+            encoder.encode(userApiSettings.webhook_secret),
+            { name: "HMAC", hash: "SHA-256" },
+            false,
+            ["sign"]
+          );
+          const signatureBuffer = await crypto.subtle.sign("HMAC", key, encoder.encode(payloadString));
+          const webhookSignature = Array.from(new Uint8Array(signatureBuffer))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
+
+          // Send webhook to user
+          const webhookResponse = await fetch(userApiSettings.webhook_url, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Webhook-Signature': webhookSignature,
+            },
+            body: payloadString,
+          });
+
+          console.log('User webhook sent to:', userApiSettings.webhook_url, 'Status:', webhookResponse.status);
+        } catch (webhookError) {
+          console.error('Error sending user webhook:', webhookError);
+        }
+      }
     }
 
     return new Response(JSON.stringify({ status: 'success' }), {
