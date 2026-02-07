@@ -58,6 +58,7 @@ export default function Checkout() {
   const [searchParams] = useSearchParams();
   const [step, setStep] = useState<'form' | 'payment' | 'success'>('form');
   const [loading, setLoading] = useState(false);
+  const [loadingRef, setLoadingRef] = useState(false);
   const [channels, setChannels] = useState<FeeSettings[]>([]);
   const [transaction, setTransaction] = useState<Transaction | null>(null);
   const [countdown, setCountdown] = useState<number>(0);
@@ -72,9 +73,46 @@ export default function Checkout() {
   const [customerPhone, setCustomerPhone] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  // Check for reference in URL
+  const refParam = searchParams.get('ref');
+
   useEffect(() => {
     fetchChannels();
-  }, []);
+    if (refParam) {
+      loadTransactionByRef(refParam);
+    }
+  }, [refParam]);
+
+  const loadTransactionByRef = async (ref: string) => {
+    setLoadingRef(true);
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('partner_reference_no', ref)
+        .single();
+
+      if (error) throw error;
+
+      if (data) {
+        setTransaction(data);
+        if (data.status === 'paid') {
+          setStep('success');
+        } else if (data.status === 'pending') {
+          setStep('payment');
+        }
+      }
+    } catch (error) {
+      console.error('Error loading transaction:', error);
+      toast({
+        title: 'Transaksi Tidak Ditemukan',
+        description: 'Referensi pembayaran tidak valid',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingRef(false);
+    }
+  };
 
   useEffect(() => {
     if (transaction?.expires_at) {

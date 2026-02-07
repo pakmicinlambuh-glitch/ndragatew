@@ -28,6 +28,7 @@ import {
   ChevronDown,
   DollarSign,
   Shield,
+  Code,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -53,6 +54,11 @@ const navItems: NavItem[] = [
     title: 'Riwayat Transaksi',
     href: '/dashboard/transactions',
     icon: <History className="h-5 w-5" />,
+  },
+  {
+    title: 'API & Webhook',
+    href: '/dashboard/api',
+    icon: <Code className="h-5 w-5" />,
   },
   {
     title: 'Semua Transaksi',

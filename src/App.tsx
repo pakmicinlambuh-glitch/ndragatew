@@ -15,9 +15,10 @@ import Transactions from "./pages/dashboard/Transactions";
 import Profile from "./pages/dashboard/Profile";
 import AdminTransactions from "./pages/admin/AdminTransactions";
 import UserManagement from "./pages/admin/UserManagement";
-import ApiSettings from "./pages/admin/ApiSettings";
+import AdminApiSettings from "./pages/admin/ApiSettings";
 import FeeSettings from "./pages/admin/FeeSettings";
 import Reports from "./pages/admin/Reports";
+import UserApiSettings from "./pages/dashboard/ApiSettings";
 import Checkout from "./pages/Checkout";
 import NotFound from "./pages/NotFound";
 
@@ -77,6 +78,16 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/dashboard/api"
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <UserApiSettings />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
 
             {/* Admin Routes */}
             <Route
@@ -104,7 +115,7 @@ const App = () => (
               element={
                 <ProtectedRoute requireAdmin>
                   <DashboardLayout>
-                    <ApiSettings />
+                    <AdminApiSettings />
                   </DashboardLayout>
                 </ProtectedRoute>
               }

@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, QrCode, Building2, Store, CreditCard } from 'lucide-react';
+import { Loader2, QrCode, Building2, Store, CreditCard, Copy, ExternalLink, CheckCircle } from 'lucide-react';
 import { z } from 'zod';
 
 interface FeeSettings {
@@ -45,6 +45,11 @@ export default function CreateTransaction() {
   const [loading, setLoading] = useState(false);
   const [channels, setChannels] = useState<FeeSettings[]>([]);
   const [fetchingChannels, setFetchingChannels] = useState(true);
+  const [createdTransaction, setCreatedTransaction] = useState<{
+    id: string;
+    partner_reference_no: string;
+    payment_url: string;
+  } | null>(null);
 
   // Form state
   const [amount, setAmount] = useState('');
@@ -162,6 +167,7 @@ export default function CreateTransaction() {
       const adminFee = calculateFee(numAmount);
       const totalAmount = numAmount + adminFee;
       const partnerReferenceNo = generateReferenceNo();
+      const paymentUrl = `${window.location.origin}/checkout?ref=${partnerReferenceNo}`;
 
       // Create transaction in database
       const { data: transaction, error: txError } = await supabase
@@ -177,6 +183,7 @@ export default function CreateTransaction() {
           customer_name: customerName,
           customer_email: customerEmail || null,
           customer_phone: customerPhone || null,
+          payment_url: paymentUrl,
           status: 'pending',
           expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(), // 15 minutes
         })
@@ -201,6 +208,13 @@ export default function CreateTransaction() {
       );
 
       if (paymentError) throw paymentError;
+
+      // Set created transaction to show payment link
+      setCreatedTransaction({
+        id: transaction.id,
+        partner_reference_no: partnerReferenceNo,
+        payment_url: paymentUrl,
+      });
 
       toast({
         title: 'Transaksi Berhasil Dibuat',
@@ -456,6 +470,65 @@ export default function CreateTransaction() {
           )}
         </Button>
       </form>
+
+      {/* Payment Link Card - Shows after transaction created */}
+      {createdTransaction && (
+        <Card className="mt-6 border-success/50 bg-success/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-success">
+              <CheckCircle className="h-5 w-5" />
+              Transaksi Berhasil Dibuat!
+            </CardTitle>
+            <CardDescription>
+              Bagikan link pembayaran ini ke pelanggan
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Referensi</Label>
+              <p className="font-mono text-sm">{createdTransaction.partner_reference_no}</p>
+            </div>
+            <div className="space-y-2">
+              <Label>Payment Link</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={createdTransaction.payment_url}
+                  readOnly
+                  className="font-mono text-sm"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(createdTransaction.payment_url);
+                    toast({
+                      title: 'Disalin!',
+                      description: 'Payment link berhasil disalin',
+                    });
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => window.open(createdTransaction.payment_url, '_blank')}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => setCreatedTransaction(null)}
+            >
+              Buat Transaksi Baru
+            </Button>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
