@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -27,7 +27,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Loader2, Search, Eye, CreditCard, Copy, CheckCircle } from 'lucide-react';
+import { Loader2, Search, Eye, CreditCard, Copy, CheckCircle, ExternalLink, Link2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
@@ -48,6 +48,7 @@ interface Transaction {
   qr_content: string | null;
   va_number: string | null;
   payment_code: string | null;
+  payment_url: string | null;
   expires_at: string | null;
   paid_at: string | null;
   created_at: string;
@@ -67,7 +68,6 @@ export default function Transactions() {
     if (user) {
       fetchTransactions();
       
-      // Set up realtime subscription
       const channel = supabase
         .channel('user-transactions')
         .on(
@@ -159,6 +159,10 @@ export default function Transactions() {
     });
   };
 
+  const getPaymentUrl = (tx: Transaction) => {
+    return tx.payment_url || `${window.location.origin}/checkout?ref=${tx.partner_reference_no}`;
+  };
+
   const filteredTransactions = transactions.filter((tx) => {
     const matchesSearch =
       tx.partner_reference_no.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -234,8 +238,23 @@ export default function Transactions() {
                 <TableBody>
                   {filteredTransactions.map((tx) => (
                     <TableRow key={tx.id}>
-                      <TableCell className="font-mono text-sm">
-                        {tx.partner_reference_no}
+                      <TableCell>
+                        <div className="space-y-1">
+                          <p className="font-mono text-sm">{tx.partner_reference_no}</p>
+                          {tx.status === 'pending' && (
+                            <div className="flex items-center gap-1">
+                              <Link2 className="h-3 w-3 text-primary" />
+                              <a 
+                                href={getPaymentUrl(tx)} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-xs text-primary hover:underline"
+                              >
+                                Buka Payment Link
+                              </a>
+                            </div>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <div>
@@ -267,13 +286,35 @@ export default function Transactions() {
                         })}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setSelectedTransaction(tx)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center justify-end gap-1">
+                          {tx.status === 'pending' && (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => copyToClipboard(getPaymentUrl(tx))}
+                                title="Salin Payment Link"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => window.open(getPaymentUrl(tx), '_blank')}
+                                title="Buka Payment Link"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setSelectedTransaction(tx)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -326,6 +367,38 @@ export default function Transactions() {
                   </p>
                 </div>
               </div>
+
+              {/* Payment Link for Pending */}
+              {selectedTransaction.status === 'pending' && (
+                <div className="rounded-lg bg-primary/5 p-4 border border-primary/20">
+                  <p className="text-sm font-medium mb-2">Payment Link</p>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={getPaymentUrl(selectedTransaction)}
+                      readOnly
+                      className="text-xs font-mono"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => copyToClipboard(getPaymentUrl(selectedTransaction))}
+                    >
+                      {copied ? (
+                        <CheckCircle className="h-4 w-4 text-success" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => window.open(getPaymentUrl(selectedTransaction), '_blank')}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* Payment Details */}
               {selectedTransaction.va_number && (

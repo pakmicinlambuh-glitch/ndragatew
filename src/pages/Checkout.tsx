@@ -1,153 +1,90 @@
 import { useState, useEffect } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, QrCode, Building2, Store, CreditCard, CheckCircle, Clock, Copy, XCircle } from 'lucide-react';
+import { Loader2, QrCode, CreditCard, CheckCircle, Clock, Copy, XCircle, AlertTriangle, Download, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { z } from 'zod';
-
-interface FeeSettings {
-  channel_code: string;
-  channel_name: string;
-  channel_type: string;
-  base_fee_type: string;
-  base_fee_value: number;
-  markup_fee_type: string;
-  markup_fee_value: number;
-  min_amount: number;
-  max_amount: number;
-  is_active: boolean;
-}
 
 interface Transaction {
   id: string;
-  partner_reference_no: string;
+  partnerReferenceNo: string;
   amount: number;
-  admin_fee: number;
-  total_amount: number;
-  payment_method: string;
-  channel_code: string;
+  adminFee: number;
+  totalAmount: number;
+  paymentMethod: string;
+  channelCode: string;
+  customerName: string;
   status: string;
-  qr_content: string | null;
-  va_number: string | null;
-  payment_code: string | null;
-  expires_at: string | null;
+  qrContent: string | null;
+  vaNumber: string | null;
+  paymentCode: string | null;
+  expiresAt: string | null;
+  paidAt: string | null;
 }
-
-const checkoutSchema = z.object({
-  amount: z.number().min(10000, 'Minimal Rp 10.000').max(50000000, 'Maksimal Rp 50.000.000'),
-  customerName: z.string().min(2, 'Nama minimal 2 karakter').max(100),
-  customerEmail: z.string().email('Email tidak valid').optional().or(z.literal('')),
-  customerPhone: z.string().optional(),
-});
 
 export default function Checkout() {
   const { toast } = useToast();
   const [searchParams] = useSearchParams();
-  const [step, setStep] = useState<'form' | 'payment' | 'success'>('form');
-  const [loading, setLoading] = useState(false);
-  const [loadingRef, setLoadingRef] = useState(false);
-  const [channels, setChannels] = useState<FeeSettings[]>([]);
+  const [loading, setLoading] = useState(true);
   const [transaction, setTransaction] = useState<Transaction | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number>(0);
   const [copied, setCopied] = useState(false);
 
-  // Form state
-  const [amount, setAmount] = useState(searchParams.get('amount') || '');
-  const [paymentMethod, setPaymentMethod] = useState<'qris' | 'va' | 'retail'>('qris');
-  const [channelCode, setChannelCode] = useState('');
-  const [customerName, setCustomerName] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [errors, setErrors] = useState<Record<string, string>>({});
-
-  // Check for reference in URL
   const refParam = searchParams.get('ref');
 
   useEffect(() => {
-    fetchChannels();
-    if (refParam) {
-      loadTransactionByRef(refParam);
+    if (!refParam) {
+      setError('MISSING_REF');
+      setLoading(false);
+      return;
     }
+    loadTransaction(refParam);
   }, [refParam]);
 
-  const loadTransactionByRef = async (ref: string) => {
-    setLoadingRef(true);
+  const loadTransaction = async (ref: string) => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('partner_reference_no', ref)
-        .single();
-
-      if (error) throw error;
-
-      if (data) {
-        setTransaction(data);
-        if (data.status === 'paid') {
-          setStep('success');
-        } else if (data.status === 'pending') {
-          setStep('payment');
+      // Use edge function for public access
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-transaction-by-ref?ref=${encodeURIComponent(ref)}`,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
         }
+      );
+
+      const result = await response.json();
+
+      if (!result.success) {
+        setError(result.code || 'NOT_FOUND');
+        return;
       }
-    } catch (error) {
-      console.error('Error loading transaction:', error);
-      toast({
-        title: 'Transaksi Tidak Ditemukan',
-        description: 'Referensi pembayaran tidak valid',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoadingRef(false);
-    }
-  };
 
-  useEffect(() => {
-    if (transaction?.expires_at) {
-      const interval = setInterval(() => {
-        const now = new Date().getTime();
-        const expiry = new Date(transaction.expires_at!).getTime();
-        const diff = Math.max(0, Math.floor((expiry - now) / 1000));
-        setCountdown(diff);
-
-        if (diff === 0) {
-          clearInterval(interval);
-        }
-      }, 1000);
-
-      return () => clearInterval(interval);
-    }
-  }, [transaction]);
-
-  useEffect(() => {
-    if (transaction?.id) {
+      setTransaction(result.data);
+      
+      // Start realtime subscription for payment updates
       const channel = supabase
-        .channel(`checkout-${transaction.id}`)
+        .channel(`checkout-${result.data.id}`)
         .on(
           'postgres_changes',
           {
             event: 'UPDATE',
             schema: 'public',
             table: 'transactions',
-            filter: `id=eq.${transaction.id}`,
+            filter: `id=eq.${result.data.id}`,
           },
           (payload) => {
-            const updated = payload.new as Transaction;
-            setTransaction(updated);
+            const updated = payload.new;
             if (updated.status === 'paid') {
-              setStep('success');
+              setTransaction(prev => prev ? { ...prev, status: 'paid', paidAt: updated.paid_at } : null);
+            } else if (updated.status === 'expired') {
+              setTransaction(prev => prev ? { ...prev, status: 'expired' } : null);
             }
           }
         )
@@ -156,59 +93,31 @@ export default function Checkout() {
       return () => {
         supabase.removeChannel(channel);
       };
-    }
-  }, [transaction?.id]);
-
-  const fetchChannels = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('fee_settings')
-        .select('*')
-        .eq('is_active', true);
-
-      if (error) throw error;
-      setChannels(data || []);
-    } catch (error) {
-      console.error('Error fetching channels:', error);
+    } catch (err) {
+      console.error('Error loading transaction:', err);
+      setError('INTERNAL_ERROR');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const calculateFee = (baseAmount: number) => {
-    if (paymentMethod === 'qris') {
-      const qrisChannel = channels.find(c => c.channel_type === 'qris');
-      if (qrisChannel) {
-        let fee = 0;
-        if (qrisChannel.base_fee_type === 'fixed') {
-          fee = qrisChannel.base_fee_value;
-        } else {
-          fee = (baseAmount * qrisChannel.base_fee_value) / 100;
-        }
-        if (qrisChannel.markup_fee_type === 'fixed') {
-          fee += qrisChannel.markup_fee_value;
-        } else {
-          fee += (baseAmount * qrisChannel.markup_fee_value) / 100;
-        }
-        return Math.ceil(fee);
-      }
-      return 0;
-    }
+  useEffect(() => {
+    if (transaction?.expiresAt && transaction.status === 'pending') {
+      const interval = setInterval(() => {
+        const now = new Date().getTime();
+        const expiry = new Date(transaction.expiresAt!).getTime();
+        const diff = Math.max(0, Math.floor((expiry - now) / 1000));
+        setCountdown(diff);
 
-    const channel = channels.find(c => c.channel_code === channelCode);
-    if (!channel) return 0;
+        if (diff === 0) {
+          clearInterval(interval);
+          setTransaction(prev => prev ? { ...prev, status: 'expired' } : null);
+        }
+      }, 1000);
 
-    let fee = 0;
-    if (channel.base_fee_type === 'fixed') {
-      fee = channel.base_fee_value;
-    } else {
-      fee = (baseAmount * channel.base_fee_value) / 100;
+      return () => clearInterval(interval);
     }
-    if (channel.markup_fee_type === 'fixed') {
-      fee += channel.markup_fee_value;
-    } else {
-      fee += (baseAmount * channel.markup_fee_value) / 100;
-    }
-    return Math.ceil(fee);
-  };
+  }, [transaction?.expiresAt, transaction?.status]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -224,12 +133,6 @@ export default function Checkout() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const generateReferenceNo = () => {
-    const timestamp = Date.now();
-    const random = Math.random().toString(36).substring(2, 8).toUpperCase();
-    return `CHK-${timestamp}-${random}`;
-  };
-
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -240,129 +143,123 @@ export default function Checkout() {
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrors({});
-
-    const numAmount = parseInt(amount.replace(/\D/g, '')) || 0;
-
-    const result = checkoutSchema.safeParse({
-      amount: numAmount,
-      customerName,
-      customerEmail: customerEmail || undefined,
-      customerPhone,
-    });
-
-    if (!result.success) {
-      const newErrors: Record<string, string> = {};
-      result.error.errors.forEach(err => {
-        if (err.path[0]) newErrors[err.path[0] as string] = err.message;
-      });
-      setErrors(newErrors);
-      return;
-    }
-
-    if ((paymentMethod === 'va' || paymentMethod === 'retail') && !channelCode) {
-      setErrors({ channelCode: 'Pilih channel pembayaran' });
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      const adminFee = calculateFee(numAmount);
-      const totalAmount = numAmount + adminFee;
-      const partnerReferenceNo = generateReferenceNo();
-
-      // Create transaction
-      const { data: txData, error: txError } = await supabase
-        .from('transactions')
-        .insert({
-          partner_reference_no: partnerReferenceNo,
-          amount: numAmount,
-          admin_fee: adminFee,
-          total_amount: totalAmount,
-          payment_method: paymentMethod,
-          channel_code: paymentMethod === 'qris' ? 'QRIS' : channelCode,
-          customer_name: customerName,
-          customer_email: customerEmail || null,
-          customer_phone: customerPhone || null,
-          status: 'pending',
-          expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-        })
-        .select()
-        .single();
-
-      if (txError) throw txError;
-
-      // Call edge function to create payment
-      const { data: paymentData, error: paymentError } = await supabase.functions.invoke(
-        'create-payment',
-        {
-          body: {
-            transactionId: txData.id,
-            amount: numAmount,
-            paymentMethod,
-            channelCode: paymentMethod === 'qris' ? 'QRIS' : channelCode,
-            partnerReferenceNo,
-            customerName,
-          },
-        }
-      );
-
-      if (paymentError) throw paymentError;
-
-      // Fetch updated transaction with payment details
-      const { data: updatedTx, error: fetchError } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('id', txData.id)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      setTransaction(updatedTx);
-      setStep('payment');
-    } catch (error: any) {
-      console.error('Error creating transaction:', error);
-      toast({
-        title: 'Gagal Membuat Transaksi',
-        description: error.message || 'Terjadi kesalahan',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
+  const downloadQR = () => {
+    if (!transaction?.qrContent) return;
+    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(transaction.qrContent)}`;
+    const link = document.createElement('a');
+    link.href = qrUrl;
+    link.download = `qr-${transaction.partnerReferenceNo}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const vaChannels = channels.filter(c => c.channel_type === 'va');
-  const retailChannels = channels.filter(c => c.channel_type === 'retail');
-
-  const numAmount = parseInt(amount.replace(/\D/g, '')) || 0;
-  const adminFee = calculateFee(numAmount);
-  const totalAmount = numAmount + adminFee;
-
-  if (step === 'success') {
+  // Error states
+  if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-success/10 via-background to-primary/10 p-4">
+      <div className="min-h-screen bg-gradient-to-br from-destructive/10 via-background to-muted p-4">
         <div className="mx-auto max-w-md pt-12">
           <Card className="border-0 shadow-xl text-center">
             <CardContent className="p-8">
-              <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-success/10">
-                <CheckCircle className="h-10 w-10 text-success" />
+              <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-destructive/10">
+                {error === 'MISSING_REF' ? (
+                  <AlertTriangle className="h-10 w-10 text-warning" />
+                ) : (
+                  <XCircle className="h-10 w-10 text-destructive" />
+                )}
               </div>
-              <h1 className="text-2xl font-bold text-success">Pembayaran Berhasil!</h1>
+              <h1 className="text-2xl font-bold text-destructive">
+                {error === 'MISSING_REF' ? 'Referensi Tidak Valid' : 'Transaksi Tidak Ditemukan'}
+              </h1>
+              <p className="mt-2 text-muted-foreground">
+                {error === 'MISSING_REF' 
+                  ? 'Link pembayaran tidak memiliki kode referensi yang valid.'
+                  : 'Transaksi dengan referensi ini tidak ditemukan atau sudah tidak berlaku.'
+                }
+              </p>
+              <div className="mt-6 p-4 rounded-lg bg-muted text-left">
+                <p className="text-sm font-medium mb-2">Butuh bantuan?</p>
+                <p className="text-xs text-muted-foreground">
+                  Hubungi merchant yang memberikan link ini atau email ke support@cingateway.com
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
+          <p className="mt-4 text-muted-foreground">Memuat transaksi...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Success state
+  if (transaction?.status === 'paid') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-success/10 via-background to-primary/10 p-4">
+        <div className="mx-auto max-w-md pt-12">
+          <Card className="border-0 shadow-xl text-center overflow-hidden">
+            <div className="h-2 bg-gradient-to-r from-success to-primary" />
+            <CardContent className="p-8">
+              <div className="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full bg-success/10 animate-pulse">
+                <CheckCircle className="h-12 w-12 text-success" />
+              </div>
+              <h1 className="text-3xl font-bold text-success">Pembayaran Berhasil!</h1>
               <p className="mt-2 text-muted-foreground">
                 Terima kasih, pembayaran Anda telah kami terima
+              </p>
+              <div className="mt-8 space-y-3 text-sm">
+                <div className="flex justify-between p-3 rounded-lg bg-muted">
+                  <span className="text-muted-foreground">Referensi</span>
+                  <span className="font-mono font-medium">{transaction.partnerReferenceNo}</span>
+                </div>
+                <div className="flex justify-between p-3 rounded-lg bg-muted">
+                  <span className="text-muted-foreground">Jumlah</span>
+                  <span className="font-bold text-lg">{formatCurrency(transaction.totalAmount)}</span>
+                </div>
+                <div className="flex justify-between p-3 rounded-lg bg-muted">
+                  <span className="text-muted-foreground">Status</span>
+                  <Badge className="bg-success text-white">Lunas</Badge>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Expired state
+  if (transaction?.status === 'expired') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-muted via-background to-muted p-4">
+        <div className="mx-auto max-w-md pt-12">
+          <Card className="border-0 shadow-xl text-center">
+            <CardContent className="p-8">
+              <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-muted">
+                <Clock className="h-10 w-10 text-muted-foreground" />
+              </div>
+              <h1 className="text-2xl font-bold text-muted-foreground">Pembayaran Kedaluwarsa</h1>
+              <p className="mt-2 text-muted-foreground">
+                Waktu pembayaran telah habis. Silakan buat transaksi baru.
               </p>
               <div className="mt-6 space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Referensi</span>
-                  <span className="font-mono">{transaction?.partner_reference_no}</span>
+                  <span className="font-mono">{transaction.partnerReferenceNo}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Jumlah</span>
-                  <span className="font-bold">{formatCurrency(transaction?.total_amount || 0)}</span>
+                  <span>{formatCurrency(transaction.totalAmount)}</span>
                 </div>
               </div>
             </CardContent>
@@ -372,338 +269,197 @@ export default function Checkout() {
     );
   }
 
-  if (step === 'payment' && transaction) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4">
-        <div className="mx-auto max-w-md pt-8">
-          {/* Header */}
-          <div className="mb-6 text-center">
-            <div className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-accent p-2 text-primary-foreground">
-              <CreditCard className="h-5 w-5" />
-            </div>
-            <h1 className="mt-3 text-xl font-bold">CinGateway</h1>
-          </div>
-
-          <Card className="border-0 shadow-xl">
-            <CardHeader className="text-center">
-              <CardTitle>Menunggu Pembayaran</CardTitle>
-              <CardDescription>
-                Selesaikan pembayaran sebelum waktu habis
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {/* Countdown */}
-              <div className="flex items-center justify-center gap-2 rounded-lg bg-warning/10 p-4">
-                <Clock className="h-5 w-5 text-warning" />
-                <span className="text-2xl font-bold text-warning">
-                  {formatCountdown(countdown)}
-                </span>
-              </div>
-
-              {/* Amount */}
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground">Total Pembayaran</p>
-                <p className="text-3xl font-bold text-primary">
-                  {formatCurrency(transaction.total_amount)}
-                </p>
-              </div>
-
-              {/* Payment Details */}
-              {transaction.qr_content && (
-                <div className="flex flex-col items-center gap-4">
-                  <img
-                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(transaction.qr_content)}`}
-                    alt="QR Code"
-                    className="rounded-lg"
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Scan QR code menggunakan aplikasi e-wallet atau mobile banking
-                  </p>
-                </div>
-              )}
-
-              {transaction.va_number && (
-                <div className="rounded-lg bg-muted p-4">
-                  <p className="text-sm text-muted-foreground">
-                    Nomor Virtual Account ({transaction.channel_code})
-                  </p>
-                  <div className="mt-2 flex items-center justify-between">
-                    <p className="text-xl font-mono font-bold">{transaction.va_number}</p>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => copyToClipboard(transaction.va_number!)}
-                    >
-                      {copied ? (
-                        <CheckCircle className="h-4 w-4 text-success" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {transaction.payment_code && (
-                <div className="rounded-lg bg-muted p-4">
-                  <p className="text-sm text-muted-foreground">
-                    Kode Pembayaran ({transaction.channel_code})
-                  </p>
-                  <div className="mt-2 flex items-center justify-between">
-                    <p className="text-xl font-mono font-bold">{transaction.payment_code}</p>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => copyToClipboard(transaction.payment_code!)}
-                    >
-                      {copied ? (
-                        <CheckCircle className="h-4 w-4 text-success" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Tunjukkan kode ini ke kasir {transaction.channel_code}
-                  </p>
-                </div>
-              )}
-
-              {/* Reference */}
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Referensi</span>
-                  <span className="font-mono">{transaction.partner_reference_no}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Status</span>
-                  <Badge className="bg-warning/10 text-warning">Pending</Badge>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <p className="mt-4 text-center text-xs text-muted-foreground">
-            Halaman akan otomatis terupdate saat pembayaran diterima
-          </p>
-        </div>
-      </div>
-    );
-  }
-
+  // Pending payment state
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 p-4">
-      <div className="mx-auto max-w-lg pt-8">
+      <div className="mx-auto max-w-md pt-6 pb-12">
         {/* Header */}
         <div className="mb-6 text-center">
-          <div className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-accent p-3 text-primary-foreground">
+          <div className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-primary to-accent p-3 text-primary-foreground shadow-lg">
             <CreditCard className="h-6 w-6" />
           </div>
-          <h1 className="mt-4 text-2xl font-bold">CinGateway</h1>
-          <p className="mt-1 text-muted-foreground">Pembayaran Cepat & Aman</p>
+          <h1 className="mt-3 text-xl font-bold">CinGateway</h1>
+          <p className="text-sm text-muted-foreground">Payment Gateway</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Payment Method */}
-          <Card className="border-0 shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-lg">Pilih Metode Pembayaran</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <RadioGroup
-                value={paymentMethod}
-                onValueChange={(value) => {
-                  setPaymentMethod(value as 'qris' | 'va' | 'retail');
-                  setChannelCode('');
-                }}
-                className="grid grid-cols-3 gap-3"
-              >
-                <div>
-                  <RadioGroupItem value="qris" id="qris" className="peer sr-only" />
-                  <Label
-                    htmlFor="qris"
-                    className="flex flex-col items-center justify-center rounded-xl border-2 border-muted bg-popover p-4 hover:bg-accent/50 peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 cursor-pointer transition-all"
-                  >
-                    <QrCode className="mb-2 h-6 w-6" />
-                    <span className="text-sm font-medium">QRIS</span>
-                  </Label>
-                </div>
+        <Card className="border-0 shadow-xl overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-primary to-accent" />
+          <CardHeader className="text-center pb-2">
+            <CardTitle className="text-lg">Menunggu Pembayaran</CardTitle>
+            <CardDescription>
+              Selesaikan pembayaran sebelum waktu habis
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Countdown */}
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-warning/10 p-4 border border-warning/20">
+              <Clock className="h-5 w-5 text-warning" />
+              <span className="text-3xl font-bold font-mono text-warning">
+                {formatCountdown(countdown)}
+              </span>
+            </div>
 
-                <div>
-                  <RadioGroupItem value="va" id="va" className="peer sr-only" />
-                  <Label
-                    htmlFor="va"
-                    className="flex flex-col items-center justify-center rounded-xl border-2 border-muted bg-popover p-4 hover:bg-accent/50 peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 cursor-pointer transition-all"
-                  >
-                    <Building2 className="mb-2 h-6 w-6" />
-                    <span className="text-sm font-medium">VA</span>
-                  </Label>
-                </div>
-
-                <div>
-                  <RadioGroupItem value="retail" id="retail" className="peer sr-only" />
-                  <Label
-                    htmlFor="retail"
-                    className="flex flex-col items-center justify-center rounded-xl border-2 border-muted bg-popover p-4 hover:bg-accent/50 peer-data-[state=checked]:border-primary peer-data-[state=checked]:bg-primary/5 cursor-pointer transition-all"
-                  >
-                    <Store className="mb-2 h-6 w-6" />
-                    <span className="text-sm font-medium">Retail</span>
-                  </Label>
-                </div>
-              </RadioGroup>
-
-              {paymentMethod === 'va' && (
-                <div className="mt-4">
-                  <Select value={channelCode} onValueChange={setChannelCode}>
-                    <SelectTrigger className={errors.channelCode ? 'border-destructive' : ''}>
-                      <SelectValue placeholder="Pilih bank..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {vaChannels.map((channel) => (
-                        <SelectItem key={channel.channel_code} value={channel.channel_code}>
-                          {channel.channel_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.channelCode && (
-                    <p className="mt-1 text-sm text-destructive">{errors.channelCode}</p>
-                  )}
-                </div>
+            {/* Amount */}
+            <div className="text-center p-4 rounded-xl bg-gradient-to-br from-primary/5 to-accent/5 border">
+              <p className="text-sm text-muted-foreground mb-1">Total Pembayaran</p>
+              <p className="text-4xl font-bold text-primary">
+                {formatCurrency(transaction?.totalAmount || 0)}
+              </p>
+              {transaction?.adminFee && transaction.adminFee > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Termasuk biaya admin {formatCurrency(transaction.adminFee)}
+                </p>
               )}
+            </div>
 
-              {paymentMethod === 'retail' && (
-                <div className="mt-4">
-                  <Select value={channelCode} onValueChange={setChannelCode}>
-                    <SelectTrigger className={errors.channelCode ? 'border-destructive' : ''}>
-                      <SelectValue placeholder="Pilih outlet..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {retailChannels.map((channel) => (
-                        <SelectItem key={channel.channel_code} value={channel.channel_code}>
-                          {channel.channel_name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {errors.channelCode && (
-                    <p className="mt-1 text-sm text-destructive">{errors.channelCode}</p>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Amount & Customer Info */}
-          <Card className="border-0 shadow-lg">
-            <CardHeader>
-              <CardTitle className="text-lg">Detail Pembayaran</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="amount">Nominal</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">
-                    Rp
-                  </span>
-                  <Input
-                    id="amount"
-                    type="text"
-                    placeholder="0"
-                    value={amount}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/\D/g, '');
-                      const formatted = new Intl.NumberFormat('id-ID').format(
-                        parseInt(value) || 0
-                      );
-                      setAmount(formatted);
-                    }}
-                    className={`pl-10 text-lg font-semibold ${errors.amount ? 'border-destructive' : ''}`}
+            {/* QRIS Payment */}
+            {transaction?.qrContent && (
+              <div className="flex flex-col items-center gap-4">
+                <div className="p-4 bg-white rounded-2xl shadow-inner">
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(transaction.qrContent)}`}
+                    alt="QR Code"
+                    className="rounded-lg"
+                    width={220}
+                    height={220}
                   />
                 </div>
-                {errors.amount && (
-                  <p className="text-sm text-destructive">{errors.amount}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="customerName">Nama</Label>
-                <Input
-                  id="customerName"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="Nama Anda"
-                  className={errors.customerName ? 'border-destructive' : ''}
-                />
-                {errors.customerName && (
-                  <p className="text-sm text-destructive">{errors.customerName}</p>
-                )}
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="customerEmail">Email (opsional)</Label>
-                  <Input
-                    id="customerEmail"
-                    type="email"
-                    value={customerEmail}
-                    onChange={(e) => setCustomerEmail(e.target.value)}
-                    placeholder="email@example.com"
-                  />
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={downloadQR}>
+                    <Download className="h-4 w-4 mr-1" />
+                    Download QR
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => copyToClipboard(transaction.qrContent!)}>
+                    <Copy className="h-4 w-4 mr-1" />
+                    Salin Data
+                  </Button>
                 </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="customerPhone">Telepon (opsional)</Label>
-                  <Input
-                    id="customerPhone"
-                    value={customerPhone}
-                    onChange={(e) => setCustomerPhone(e.target.value)}
-                    placeholder="08xxxxxxxxxx"
-                  />
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">
+                    Scan QR code dengan aplikasi
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    GoPay, OVO, DANA, ShopeePay, atau Mobile Banking
+                  </p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Summary */}
-          <Card className="border-0 shadow-lg">
-            <CardContent className="p-4 space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal</span>
-                <span>{formatCurrency(numAmount)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Biaya Admin</span>
-                <span>{formatCurrency(adminFee)}</span>
-              </div>
-              <div className="border-t pt-2">
-                <div className="flex justify-between text-lg font-bold">
-                  <span>Total</span>
-                  <span className="text-primary">{formatCurrency(totalAmount)}</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Button
-            type="submit"
-            className="w-full h-12 text-lg"
-            disabled={loading || numAmount < 10000}
-          >
-            {loading ? (
-              <>
-                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                Memproses...
-              </>
-            ) : (
-              'Bayar Sekarang'
             )}
-          </Button>
-        </form>
 
-        <p className="mt-6 text-center text-xs text-muted-foreground">
-          Transaksi aman & terenkripsi • Powered by CinGateway
+            {/* VA Payment */}
+            {transaction?.vaNumber && (
+              <div className="space-y-4">
+                <div className="rounded-xl bg-muted p-4 border">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm text-muted-foreground">
+                      Virtual Account {transaction.channelCode}
+                    </p>
+                    <Badge variant="outline">{transaction.channelCode}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-2xl font-mono font-bold tracking-wider">{transaction.vaNumber}</p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => copyToClipboard(transaction.vaNumber!)}
+                      className="shrink-0"
+                    >
+                      {copied ? (
+                        <CheckCircle className="h-5 w-5 text-success" />
+                      ) : (
+                        <Copy className="h-5 w-5" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <p>Cara pembayaran:</p>
+                  <ol className="list-decimal list-inside text-xs space-y-1">
+                    <li>Buka aplikasi mobile banking atau ATM</li>
+                    <li>Pilih menu Transfer ke Virtual Account</li>
+                    <li>Masukkan nomor VA di atas</li>
+                    <li>Konfirmasi nominal dan bayar</li>
+                  </ol>
+                </div>
+              </div>
+            )}
+
+            {/* Retail Payment */}
+            {transaction?.paymentCode && (
+              <div className="space-y-4">
+                <div className="rounded-xl bg-muted p-4 border">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm text-muted-foreground">
+                      Kode Pembayaran {transaction.channelCode}
+                    </p>
+                    <Badge variant="outline">{transaction.channelCode}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-2xl font-mono font-bold tracking-wider">{transaction.paymentCode}</p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => copyToClipboard(transaction.paymentCode!)}
+                      className="shrink-0"
+                    >
+                      {copied ? (
+                        <CheckCircle className="h-5 w-5 text-success" />
+                      ) : (
+                        <Copy className="h-5 w-5" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+                <div className="text-sm text-muted-foreground space-y-1">
+                  <p>Cara pembayaran:</p>
+                  <ol className="list-decimal list-inside text-xs space-y-1">
+                    <li>Kunjungi gerai {transaction.channelCode} terdekat</li>
+                    <li>Tunjukkan kode pembayaran ke kasir</li>
+                    <li>Bayar sesuai nominal</li>
+                    <li>Simpan struk sebagai bukti</li>
+                  </ol>
+                </div>
+              </div>
+            )}
+
+            {/* Reference Info */}
+            <div className="space-y-2 text-sm border-t pt-4">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">No. Referensi</span>
+                <div className="flex items-center gap-1">
+                  <span className="font-mono text-xs">{transaction?.partnerReferenceNo}</span>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    className="h-6 w-6"
+                    onClick={() => copyToClipboard(transaction?.partnerReferenceNo || '')}
+                  >
+                    <Copy className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Pelanggan</span>
+                <span>{transaction?.customerName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Status</span>
+                <Badge className="bg-warning/10 text-warning border-warning/20">
+                  Menunggu Pembayaran
+                </Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          Halaman akan otomatis terupdate saat pembayaran diterima
         </p>
+        
+        <div className="mt-6 text-center">
+          <p className="text-xs text-muted-foreground">
+            Powered by <span className="font-medium">CinGateway</span>
+          </p>
+        </div>
       </div>
     </div>
   );
