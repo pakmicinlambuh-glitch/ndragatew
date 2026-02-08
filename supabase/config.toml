@@ -1,1 +1,19 @@
 project_id = "tlfnpkhwxmcajklkozor"
+
+[functions.create-payment]
+verify_jwt = false
+
+[functions.get-channels]
+verify_jwt = false
+
+[functions.payment-callback]
+verify_jwt = false
+
+[functions.validate-callback]
+verify_jwt = false
+
+[functions.user-create-payment]
+verify_jwt = false
+
+[functions.get-transaction-by-ref]
+verify_jwt = false

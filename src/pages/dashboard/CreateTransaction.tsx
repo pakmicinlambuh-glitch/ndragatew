@@ -518,14 +518,24 @@ export default function CreateTransaction() {
                 </Button>
               </div>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              onClick={() => setCreatedTransaction(null)}
-            >
-              Buat Transaksi Baru
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                className="flex-1"
+                onClick={() => window.open(createdTransaction.payment_url, '_blank')}
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Buka Payment Link
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => setCreatedTransaction(null)}
+              >
+                Buat Transaksi Baru
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}

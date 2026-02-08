@@ -44,6 +44,39 @@ export type Database = {
         }
         Relationships: []
       }
+      balance_history: {
+        Row: {
+          amount: number
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          reference_id: string | null
+          type: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          reference_id?: string | null
+          type: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          reference_id?: string | null
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       fee_settings: {
         Row: {
           base_fee_type: Database["public"]["Enums"]["fee_type"]
@@ -52,12 +85,15 @@ export type Database = {
           channel_name: string
           channel_type: string
           created_at: string | null
+          fee_above_threshold: number | null
+          fee_below_threshold: number | null
           id: string
           is_active: boolean | null
           markup_fee_type: Database["public"]["Enums"]["fee_type"]
           markup_fee_value: number
           max_amount: number | null
           min_amount: number | null
+          threshold_amount: number | null
           updated_at: string | null
         }
         Insert: {
@@ -67,12 +103,15 @@ export type Database = {
           channel_name: string
           channel_type: string
           created_at?: string | null
+          fee_above_threshold?: number | null
+          fee_below_threshold?: number | null
           id?: string
           is_active?: boolean | null
           markup_fee_type?: Database["public"]["Enums"]["fee_type"]
           markup_fee_value?: number
           max_amount?: number | null
           min_amount?: number | null
+          threshold_amount?: number | null
           updated_at?: string | null
         }
         Update: {
@@ -82,13 +121,49 @@ export type Database = {
           channel_name?: string
           channel_type?: string
           created_at?: string | null
+          fee_above_threshold?: number | null
+          fee_below_threshold?: number | null
           id?: string
           is_active?: boolean | null
           markup_fee_type?: Database["public"]["Enums"]["fee_type"]
           markup_fee_value?: number
           max_amount?: number | null
           min_amount?: number | null
+          threshold_amount?: number | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_broadcast: boolean | null
+          is_read: boolean | null
+          message: string
+          title: string
+          type: Database["public"]["Enums"]["notification_type"] | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_broadcast?: boolean | null
+          is_read?: boolean | null
+          message: string
+          title: string
+          type?: Database["public"]["Enums"]["notification_type"] | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_broadcast?: boolean | null
+          is_read?: boolean | null
+          message?: string
+          title?: string
+          type?: Database["public"]["Enums"]["notification_type"] | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -100,6 +175,8 @@ export type Database = {
           id: string
           is_active: boolean | null
           phone: string | null
+          suspended_at: string | null
+          suspended_reason: string | null
           updated_at: string | null
           user_id: string
         }
@@ -110,6 +187,8 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           phone?: string | null
+          suspended_at?: string | null
+          suspended_reason?: string | null
           updated_at?: string | null
           user_id: string
         }
@@ -120,6 +199,8 @@ export type Database = {
           id?: string
           is_active?: boolean | null
           phone?: string | null
+          suspended_at?: string | null
+          suspended_reason?: string | null
           updated_at?: string | null
           user_id?: string
         }
@@ -233,6 +314,78 @@ export type Database = {
         }
         Relationships: []
       }
+      user_balance: {
+        Row: {
+          balance: number
+          created_at: string | null
+          id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_kyc: {
+        Row: {
+          created_at: string | null
+          id: string
+          id_number: string | null
+          id_photo_url: string | null
+          id_type: string | null
+          rejection_reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          selfie_url: string | null
+          status: Database["public"]["Enums"]["kyc_status"] | null
+          submitted_at: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          id_number?: string | null
+          id_photo_url?: string | null
+          id_type?: string | null
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          selfie_url?: string | null
+          status?: Database["public"]["Enums"]["kyc_status"] | null
+          submitted_at?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          id_number?: string | null
+          id_photo_url?: string | null
+          id_type?: string | null
+          rejection_reason?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          selfie_url?: string | null
+          status?: Database["public"]["Enums"]["kyc_status"] | null
+          submitted_at?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -259,6 +412,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      adjust_user_balance: {
+        Args: {
+          _amount: number
+          _created_by?: string
+          _description?: string
+          _reference_id?: string
+          _type: string
+          _user_id: string
+        }
+        Returns: boolean
+      }
       get_user_role: {
         Args: { _user_id: string }
         Returns: Database["public"]["Enums"]["app_role"]
@@ -270,10 +434,13 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_user_suspended: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       app_role: "admin" | "user"
       fee_type: "fixed" | "percent"
+      kyc_status: "pending" | "approved" | "rejected"
+      notification_type: "info" | "warning" | "success" | "error"
       payment_method: "qris" | "va" | "retail"
       transaction_status: "pending" | "paid" | "expired" | "failed"
     }
@@ -405,6 +572,8 @@ export const Constants = {
     Enums: {
       app_role: ["admin", "user"],
       fee_type: ["fixed", "percent"],
+      kyc_status: ["pending", "approved", "rejected"],
+      notification_type: ["info", "warning", "success", "error"],
       payment_method: ["qris", "va", "retail"],
       transaction_status: ["pending", "paid", "expired", "failed"],
     },
