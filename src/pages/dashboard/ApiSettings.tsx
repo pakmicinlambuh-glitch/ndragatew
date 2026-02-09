@@ -210,12 +210,65 @@ export default function UserApiSettings() {
         </CardContent>
       </Card>
 
-      {/* Webhook Settings */}
+      {/* Sanpay Webhook Configuration */}
+      <Card className="border-primary/50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Link className="h-5 w-5" />
+            Konfigurasi Webhook Sanpay
+          </CardTitle>
+          <CardDescription>
+            Konfigurasi ini untuk menghubungkan ke website resmi sanpay.site
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Callback URL (untuk sanpay.site)</Label>
+            <div className="flex gap-2">
+              <Input
+                value="https://tlfnpkhwxmcajklkozor.supabase.co/functions/v1/sanpay-webhook"
+                readOnly
+                className="font-mono text-sm"
+              />
+              <Button
+                variant="outline"
+                onClick={() => copyToClipboard('https://tlfnpkhwxmcajklkozor.supabase.co/functions/v1/sanpay-webhook', 'Callback URL')}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Masukkan URL ini sebagai callback URL di dashboard sanpay.site
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-warning bg-warning/10 p-4">
+            <h4 className="mb-2 flex items-center gap-2 font-semibold text-warning">
+              IP Whitelist
+            </h4>
+            <div className="flex items-center gap-2">
+              <Badge variant="outline" className="font-mono">103.127.137.140</Badge>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => copyToClipboard('103.127.137.140', 'IP Address')}
+              >
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
+            <p className="mt-2 text-sm">
+              Whitelist IP ini di firewall server Anda untuk menerima callback dari sanpay.site
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Your Webhook Settings */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Webhook className="h-5 w-5" />
-            Webhook
+            Webhook Anda
           </CardTitle>
           <CardDescription>
             Terima notifikasi pembayaran ke server Anda

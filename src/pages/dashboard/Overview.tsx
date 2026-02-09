@@ -15,13 +15,14 @@ import {
 } from '@/components/ui/table';
 import {
   CreditCard,
-  DollarSign,
+  Wallet,
   TrendingUp,
   Clock,
   ArrowRight,
   CheckCircle,
-  XCircle,
   Loader2,
+  Bell,
+  AlertCircle,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
@@ -32,6 +33,7 @@ interface Transaction {
   partner_reference_no: string;
   amount: number;
   total_amount: number;
+  admin_fee: number;
   payment_method: string;
   channel_code: string;
   status: string;
@@ -39,9 +41,18 @@ interface Transaction {
   customer_name: string;
 }
 
+interface Widget {
+  id: string;
+  type: string;
+  title: string;
+  content: string;
+  image_url: string | null;
+  link_url: string | null;
+}
+
 interface Stats {
   totalTransactions: number;
-  totalRevenue: number;
+  userBalance: number;
   pendingTransactions: number;
   successRate: number;
 }
@@ -50,18 +61,35 @@ export default function Overview() {
   const { user, isAdmin } = useAuth();
   const [stats, setStats] = useState<Stats>({
     totalTransactions: 0,
-    totalRevenue: 0,
+    userBalance: 0,
     pendingTransactions: 0,
     successRate: 0,
   });
   const [recentTransactions, setRecentTransactions] = useState<Transaction[]>([]);
+  const [widgets, setWidgets] = useState<Widget[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (user) {
       fetchData();
+      subscribeToTransactions();
     }
   }, [user, isAdmin]);
+
+  const subscribeToTransactions = () => {
+    const channel = supabase
+      .channel('overview-transactions')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'transactions' },
+        () => fetchData()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  };
 
   const fetchData = async () => {
     try {
@@ -79,11 +107,15 @@ export default function Overview() {
       const total = transactions?.length || 0;
       const paid = transactions?.filter(t => t.status === 'paid') || [];
       const pending = transactions?.filter(t => t.status === 'pending') || [];
-      const revenue = paid.reduce((sum, t) => sum + (t.total_amount || 0), 0);
+      
+      // User balance = sum of (amount - admin_fee) for paid transactions
+      const userBalance = isAdmin
+        ? paid.reduce((sum, t) => sum + (t.admin_fee || 0), 0) // Admin sees total fees
+        : paid.reduce((sum, t) => sum + (t.amount - (t.admin_fee || 0)), 0); // User sees net balance
 
       setStats({
         totalTransactions: total,
-        totalRevenue: revenue,
+        userBalance: userBalance,
         pendingTransactions: pending.length,
         successRate: total > 0 ? Math.round((paid.length / total) * 100) : 0,
       });
@@ -102,8 +134,16 @@ export default function Overview() {
       const { data: recent, error: recentError } = await recentQuery;
 
       if (recentError) throw recentError;
-
       setRecentTransactions(recent || []);
+
+      // Fetch widgets
+      const { data: widgetsData } = await supabase
+        .from('dashboard_widgets')
+        .select('*')
+        .eq('is_active', true)
+        .order('order_index', { ascending: true });
+
+      setWidgets(widgetsData || []);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -169,6 +209,36 @@ export default function Overview() {
         </p>
       </div>
 
+      {/* Widgets */}
+      {widgets.length > 0 && (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {widgets.slice(0, 3).map((widget) => (
+            <Card key={widget.id} className="overflow-hidden">
+              {widget.image_url && (
+                <div className="h-32 overflow-hidden">
+                  <img
+                    src={widget.image_url}
+                    alt={widget.title}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              )}
+              <CardContent className="p-4">
+                <h3 className="font-semibold">{widget.title}</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{widget.content}</p>
+                {widget.link_url && (
+                  <a href={widget.link_url} target="_blank" rel="noopener noreferrer">
+                    <Button variant="link" className="mt-2 h-auto p-0">
+                      Selengkapnya <ArrowRight className="ml-1 h-3 w-3" />
+                    </Button>
+                  </a>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
+
       {/* Stats Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatsCard
@@ -177,9 +247,9 @@ export default function Overview() {
           icon={<CreditCard className="h-5 w-5" />}
         />
         <StatsCard
-          title="Total Pendapatan"
-          value={formatCurrency(stats.totalRevenue)}
-          icon={<DollarSign className="h-5 w-5" />}
+          title={isAdmin ? "Total Fee" : "Saldo Anda"}
+          value={formatCurrency(stats.userBalance)}
+          icon={<Wallet className="h-5 w-5" />}
         />
         <StatsCard
           title="Transaksi Pending"
@@ -241,15 +311,15 @@ export default function Overview() {
           <CardContent className="p-6">
             <div className="flex items-center gap-4">
               <div className="rounded-lg bg-success/10 p-3 text-success">
-                <CheckCircle className="h-6 w-6" />
+                <Bell className="h-6 w-6" />
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold">Checkout Page</h3>
+                <h3 className="font-semibold">Notifikasi</h3>
                 <p className="text-sm text-muted-foreground">
-                  Halaman pembayaran publik
+                  Lihat notifikasi terbaru
                 </p>
               </div>
-              <Link to="/checkout">
+              <Link to="/dashboard/notifications">
                 <Button size="icon" variant="ghost">
                   <ArrowRight className="h-4 w-4" />
                 </Button>

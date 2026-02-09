@@ -17,3 +17,12 @@ verify_jwt = false
 
 [functions.get-transaction-by-ref]
 verify_jwt = false
+
+[functions.check-transaction]
+verify_jwt = false
+
+[functions.sanpay-webhook]
+verify_jwt = false
+
+[functions.expire-transactions]
+verify_jwt = false
