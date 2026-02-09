@@ -25,6 +25,9 @@ interface FeeSettings {
   base_fee_value: number;
   markup_fee_type: string;
   markup_fee_value: number;
+  threshold_amount: number | null;
+  fee_below_threshold: number | null;
+  fee_above_threshold: number | null;
   min_amount: number;
   max_amount: number;
   is_active: boolean;
@@ -34,9 +37,7 @@ const transactionSchema = z.object({
   amount: z.number().min(10000, 'Minimal Rp 10.000').max(50000000, 'Maksimal Rp 50.000.000'),
   paymentMethod: z.enum(['qris', 'va', 'retail']),
   channelCode: z.string().optional(),
-  customerName: z.string().min(2, 'Nama minimal 2 karakter').max(100),
-  customerEmail: z.string().email('Email tidak valid').optional().or(z.literal('')),
-  customerPhone: z.string().optional(),
+  expiryMinutes: z.number().min(5, 'Minimal 5 menit'),
 });
 
 export default function CreateTransaction() {
@@ -51,13 +52,11 @@ export default function CreateTransaction() {
     payment_url: string;
   } | null>(null);
 
-  // Form state
+  // Simplified form state
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'qris' | 'va' | 'retail'>('qris');
   const [channelCode, setChannelCode] = useState('');
-  const [customerName, setCustomerName] = useState('');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
+  const [expiryMinutes, setExpiryMinutes] = useState('15');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -82,15 +81,20 @@ export default function CreateTransaction() {
 
   const calculateFee = (baseAmount: number) => {
     if (paymentMethod === 'qris') {
-      // QRIS default fee
       const qrisChannel = channels.find(c => c.channel_type === 'qris');
       if (qrisChannel) {
         let fee = 0;
-        if (qrisChannel.base_fee_type === 'fixed') {
-          fee = qrisChannel.base_fee_value;
+        const threshold = qrisChannel.threshold_amount || 500000;
+        
+        // Tiered fee for QRIS
+        if (baseAmount < threshold) {
+          fee = qrisChannel.fee_below_threshold || 0;
         } else {
-          fee = (baseAmount * qrisChannel.base_fee_value) / 100;
+          const feePercent = qrisChannel.fee_above_threshold || 0.7;
+          fee = (baseAmount * feePercent) / 100;
         }
+        
+        // Add markup
         if (qrisChannel.markup_fee_type === 'fixed') {
           fee += qrisChannel.markup_fee_value;
         } else {
@@ -137,14 +141,13 @@ export default function CreateTransaction() {
     setErrors({});
 
     const numAmount = parseInt(amount.replace(/\D/g, '')) || 0;
+    const numExpiryMinutes = parseInt(expiryMinutes) || 15;
 
     const result = transactionSchema.safeParse({
       amount: numAmount,
       paymentMethod,
       channelCode: paymentMethod !== 'qris' ? channelCode : undefined,
-      customerName,
-      customerEmail: customerEmail || undefined,
-      customerPhone,
+      expiryMinutes: numExpiryMinutes,
     });
 
     if (!result.success) {
@@ -168,6 +171,7 @@ export default function CreateTransaction() {
       const totalAmount = numAmount + adminFee;
       const partnerReferenceNo = generateReferenceNo();
       const paymentUrl = `${window.location.origin}/checkout?ref=${partnerReferenceNo}`;
+      const expiresAt = new Date(Date.now() + numExpiryMinutes * 60 * 1000).toISOString();
 
       // Create transaction in database
       const { data: transaction, error: txError } = await supabase
@@ -180,12 +184,10 @@ export default function CreateTransaction() {
           total_amount: totalAmount,
           payment_method: paymentMethod,
           channel_code: paymentMethod === 'qris' ? 'QRIS' : channelCode,
-          customer_name: customerName,
-          customer_email: customerEmail || null,
-          customer_phone: customerPhone || null,
+          customer_name: 'Customer',
           payment_url: paymentUrl,
           status: 'pending',
-          expires_at: new Date(Date.now() + 15 * 60 * 1000).toISOString(), // 15 minutes
+          expires_at: expiresAt,
         })
         .select()
         .single();
@@ -202,7 +204,7 @@ export default function CreateTransaction() {
             paymentMethod,
             channelCode: paymentMethod === 'qris' ? 'QRIS' : channelCode,
             partnerReferenceNo,
-            customerName,
+            customerName: 'Customer',
           },
         }
       );
@@ -223,10 +225,6 @@ export default function CreateTransaction() {
 
       // Reset form
       setAmount('');
-      setCustomerName('');
-      setCustomerEmail('');
-      setCustomerPhone('');
-      setChannelCode('');
     } catch (error: any) {
       console.error('Error creating transaction:', error);
       toast({
@@ -246,12 +244,72 @@ export default function CreateTransaction() {
   const adminFee = calculateFee(numAmount);
   const totalAmount = numAmount + adminFee;
 
+  // If transaction created, show success view
+  if (createdTransaction) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6">
+        <Card className="border-success/50 bg-success/5">
+          <CardHeader className="text-center">
+            <CheckCircle className="mx-auto h-16 w-16 text-success" />
+            <CardTitle className="mt-4 text-success">Transaksi Berhasil Dibuat!</CardTitle>
+            <CardDescription>
+              Bagikan link pembayaran ini ke pelanggan Anda
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Nomor Referensi</Label>
+              <p className="font-mono text-lg font-semibold">{createdTransaction.partner_reference_no}</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-muted-foreground">Link Pembayaran</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={createdTransaction.payment_url}
+                  readOnly
+                  className="font-mono text-sm"
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(createdTransaction.payment_url);
+                    toast({ title: 'Link disalin!' });
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Button
+                className="flex-1"
+                onClick={() => window.open(createdTransaction.payment_url, '_blank')}
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                Buka Halaman Pembayaran
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setCreatedTransaction(null)}
+              >
+                Buat Transaksi Baru
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Buat Transaksi Baru</h1>
         <p className="text-muted-foreground">
-          Generate pembayaran QRIS, Virtual Account, atau Retail
+          Cukup masukkan nominal dan waktu kadaluarsa
         </p>
       </div>
 
@@ -260,7 +318,6 @@ export default function CreateTransaction() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Metode Pembayaran</CardTitle>
-            <CardDescription>Pilih metode pembayaran yang diinginkan</CardDescription>
           </CardHeader>
           <CardContent>
             <RadioGroup
@@ -272,11 +329,7 @@ export default function CreateTransaction() {
               className="grid grid-cols-3 gap-4"
             >
               <div>
-                <RadioGroupItem
-                  value="qris"
-                  id="qris"
-                  className="peer sr-only"
-                />
+                <RadioGroupItem value="qris" id="qris" className="peer sr-only" />
                 <Label
                   htmlFor="qris"
                   className="flex flex-col items-center justify-between rounded-lg border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
@@ -287,11 +340,7 @@ export default function CreateTransaction() {
               </div>
 
               <div>
-                <RadioGroupItem
-                  value="va"
-                  id="va"
-                  className="peer sr-only"
-                />
+                <RadioGroupItem value="va" id="va" className="peer sr-only" />
                 <Label
                   htmlFor="va"
                   className="flex flex-col items-center justify-between rounded-lg border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
@@ -302,11 +351,7 @@ export default function CreateTransaction() {
               </div>
 
               <div>
-                <RadioGroupItem
-                  value="retail"
-                  id="retail"
-                  className="peer sr-only"
-                />
+                <RadioGroupItem value="retail" id="retail" className="peer sr-only" />
                 <Label
                   htmlFor="retail"
                   className="flex flex-col items-center justify-between rounded-lg border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer"
@@ -362,7 +407,7 @@ export default function CreateTransaction() {
           </CardContent>
         </Card>
 
-        {/* Amount & Customer Info */}
+        {/* Amount & Expiry */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Detail Transaksi</CardTitle>
@@ -395,40 +440,23 @@ export default function CreateTransaction() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="customerName">Nama Pelanggan</Label>
-              <Input
-                id="customerName"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                placeholder="John Doe"
-                className={errors.customerName ? 'border-destructive' : ''}
-              />
-              {errors.customerName && (
-                <p className="text-sm text-destructive">{errors.customerName}</p>
-              )}
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="customerEmail">Email (opsional)</Label>
-                <Input
-                  id="customerEmail"
-                  type="email"
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
-                  placeholder="email@example.com"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="customerPhone">No. Telepon (opsional)</Label>
-                <Input
-                  id="customerPhone"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  placeholder="081234567890"
-                />
-              </div>
+              <Label htmlFor="expiryMinutes">Waktu Kadaluarsa</Label>
+              <Select value={expiryMinutes} onValueChange={setExpiryMinutes}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="5">5 menit</SelectItem>
+                  <SelectItem value="10">10 menit</SelectItem>
+                  <SelectItem value="15">15 menit</SelectItem>
+                  <SelectItem value="30">30 menit</SelectItem>
+                  <SelectItem value="60">1 jam</SelectItem>
+                  <SelectItem value="1440">24 jam</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Minimal 5 menit
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -470,75 +498,6 @@ export default function CreateTransaction() {
           )}
         </Button>
       </form>
-
-      {/* Payment Link Card - Shows after transaction created */}
-      {createdTransaction && (
-        <Card className="mt-6 border-success/50 bg-success/5">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-success">
-              <CheckCircle className="h-5 w-5" />
-              Transaksi Berhasil Dibuat!
-            </CardTitle>
-            <CardDescription>
-              Bagikan link pembayaran ini ke pelanggan
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label>Referensi</Label>
-              <p className="font-mono text-sm">{createdTransaction.partner_reference_no}</p>
-            </div>
-            <div className="space-y-2">
-              <Label>Payment Link</Label>
-              <div className="flex gap-2">
-                <Input
-                  value={createdTransaction.payment_url}
-                  readOnly
-                  className="font-mono text-sm"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    navigator.clipboard.writeText(createdTransaction.payment_url);
-                    toast({
-                      title: 'Disalin!',
-                      description: 'Payment link berhasil disalin',
-                    });
-                  }}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => window.open(createdTransaction.payment_url, '_blank')}
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                className="flex-1"
-                onClick={() => window.open(createdTransaction.payment_url, '_blank')}
-              >
-                <ExternalLink className="h-4 w-4 mr-2" />
-                Buka Payment Link
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1"
-                onClick={() => setCreatedTransaction(null)}
-              >
-                Buat Transaksi Baru
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
