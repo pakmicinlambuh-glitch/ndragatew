@@ -1,35 +1,59 @@
 
-# CinGateway - Major Enhancement Plan
+
+# CinGateway - Comprehensive Professional Upgrade Plan
 
 ## Overview
-This plan addresses comprehensive updates including security fixes, UI modernization (TailAdmin-style), payment link improvements, tiered QRIS fees, advanced user management, and production-ready security.
+
+This plan covers a massive upgrade to transform CinGateway into a full-featured professional payment gateway aggregator system with:
+- Transaction check API & webhook endpoint
+- Real-time transaction expiry monitoring
+- Enhanced KYC system (admin exempt, merchants need full verification)
+- Full WebSocket/realtime integration
+- Simplified transaction creation (amount + expiry only)
+- Professional TailAdmin-style dashboard with navbar, sidebar, footer
+- Landing page for public visitors
+- Live chat system (user to admin)
+- Merchant QRIS feature (coming soon)
+- Complete API documentation with test functionality
 
 ---
 
-## 1. Security Fixes (Critical)
+## 1. New Edge Functions
 
-### 1.1 RLS Policy Updates
+### 1.1 Check Transaction API (`check-transaction`)
+Public endpoint for checking transaction status by reference number.
 
-**Transactions Table:**
-- Remove any overly permissive policies
-- Ensure transactions are only viewable by the owner (`user_id = auth.uid()`) or admins
-- Add public access for checkout page via `partner_reference_no` lookup only
+```text
+GET /functions/v1/check-transaction?ref=REFERENCE_NO
+Headers: X-API-Key (optional for authenticated details)
+```
 
-**Fee Settings Table:**
-- Keep public read for checkout page (needed to calculate fees)
-- Restrict sensitive business data to admins only by creating a separate view
+Response:
+```json
+{
+  "status": "success",
+  "data": {
+    "partnerReferenceNo": "INV-001",
+    "status": "pending|paid|expired",
+    "amount": 50000,
+    "payment_method": "qris",
+    "expires_at": "2025-02-09T12:00:00Z",
+    "paid_at": null
+  }
+}
+```
 
-**Checkout Page Public Access:**
-- Create an edge function `get-transaction-by-ref` that allows unauthenticated access to transaction data by reference number only
-- This ensures checkout page works without login while keeping RLS secure
+### 1.2 Webhook Endpoint (`sanpay-webhook`)
+Dedicated endpoint for sanpay.site callbacks with proper IP validation.
 
-### 1.2 Enable Leaked Password Protection
-- Configure auth settings to enable leaked password protection via Supabase dashboard
+```text
+POST /functions/v1/sanpay-webhook
+Headers: X-Merchant-Code, X-Signature
+IP Whitelist: 103.127.137.140
+```
 
-### 1.3 API Signature Security (SNAP BI Standard)
-- Implement proper HMAC-SHA256 signature validation
-- Add timestamp validation to prevent replay attacks
-- Add nonce support for idempotency
+### 1.3 Auto-Expire Transactions (`expire-transactions`)
+Cron job function to automatically expire pending transactions past their expiry time (WIB timezone).
 
 ---
 
@@ -37,351 +61,413 @@ This plan addresses comprehensive updates including security fixes, UI moderniza
 
 ### 2.1 New Tables
 
-**user_balance:**
+**merchant_qris_requests** (Coming Soon feature):
 ```sql
-CREATE TABLE user_balance (
+CREATE TABLE merchant_qris_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES profiles(user_id),
-  balance BIGINT NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
-```
-
-**user_kyc:**
-```sql
-CREATE TABLE user_kyc (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES profiles(user_id),
-  status TEXT DEFAULT 'pending', -- pending, approved, rejected
-  id_type TEXT,
-  id_number TEXT,
-  id_photo_url TEXT,
-  selfie_url TEXT,
-  submitted_at TIMESTAMPTZ,
-  reviewed_at TIMESTAMPTZ,
+  user_id UUID REFERENCES profiles(user_id) NOT NULL,
+  business_name TEXT NOT NULL,
+  business_type TEXT,
+  qris_nmid TEXT,
+  status TEXT DEFAULT 'pending',
   reviewed_by UUID,
-  notes TEXT
+  reviewed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 ```
 
-**notifications:**
+**chat_messages** (Live chat):
 ```sql
-CREATE TABLE notifications (
+CREATE TABLE chat_messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES profiles(user_id), -- NULL for broadcast
-  title TEXT NOT NULL,
+  sender_id UUID NOT NULL,
+  receiver_id UUID,
   message TEXT NOT NULL,
-  type TEXT DEFAULT 'info', -- info, warning, success, error
+  message_type TEXT DEFAULT 'text',
+  attachment_url TEXT,
   is_read BOOLEAN DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 ```
 
-### 2.2 Profile Table Updates
-- Add `suspended_at TIMESTAMPTZ`
-- Add `suspended_reason TEXT`
+**dashboard_widgets** (Admin configurable):
+```sql
+CREATE TABLE dashboard_widgets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type TEXT NOT NULL,
+  title TEXT,
+  content TEXT,
+  image_url TEXT,
+  link_url TEXT,
+  is_active BOOLEAN DEFAULT true,
+  order_index INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+```
 
-### 2.3 Fee Settings Updates
-- Add `threshold_amount INTEGER` for tiered fees
-- Add `fee_below_threshold NUMERIC`
-- Add `fee_above_threshold NUMERIC`
+### 2.2 Update user_kyc Table
+Add new required fields:
+```sql
+ALTER TABLE user_kyc ADD COLUMN business_name TEXT;
+ALTER TABLE user_kyc ADD COLUMN business_type TEXT;
+ALTER TABLE user_kyc ADD COLUMN business_address TEXT;
+ALTER TABLE user_kyc ADD COLUMN owner_name TEXT;
+ALTER TABLE user_kyc ADD COLUMN owner_nik TEXT;
+ALTER TABLE user_kyc ADD COLUMN owner_address TEXT;
+ALTER TABLE user_kyc ADD COLUMN ktp_photo_url TEXT;
+ALTER TABLE user_kyc ADD COLUMN selfie_ktp_photo_url TEXT;
+ALTER TABLE user_kyc ADD COLUMN business_photo_url TEXT;
+ALTER TABLE user_kyc ADD COLUMN rejection_reason TEXT;
+```
+
+### 2.3 Enable Realtime
+```sql
+ALTER PUBLICATION supabase_realtime ADD TABLE transactions;
+ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
+ALTER PUBLICATION supabase_realtime ADD TABLE chat_messages;
+```
 
 ---
 
-## 3. UI Modernization (TailAdmin Style)
+## 3. Landing Page (`/`)
 
-### 3.1 Dashboard Layout Updates
-- Sidebar with collapsible sections
-- Dark/light mode toggle
+Professional payment gateway landing page with:
+- Hero section with animated gradient
+- Features showcase (QRIS, VA, Retail)
+- Pricing/fee information
+- Integration steps
+- Testimonials/trust badges
+- CTA buttons (Login/Register)
+- Footer with links and contact
+
+---
+
+## 4. Dashboard Layout Upgrade
+
+### 4.1 Sidebar (Collapsible)
+- User section: Dashboard, Create Transaction, History, API & Docs, Notifications, Profile, KYC
+- Merchant section: QRIS Merchant (Coming Soon)
+- Admin section: All Transactions, Users, Fees, Settings, Reports, Live Chat, Widgets
+
+### 4.2 Top Navbar
 - Breadcrumb navigation
-- Better mobile responsiveness
-- Card-based layout with shadows and gradients
+- Search bar
+- Notification bell (realtime updates)
+- Live chat indicator (for admin)
+- User avatar dropdown (Profile, Settings, Logout)
+- Dark mode toggle
 
-### 3.2 New Dashboard Components
-- **ChartCard** - For analytics with Recharts
-- **DataTable** - Enhanced table with pagination, sorting, filtering
-- **StatCard** - Modern stats cards with trends
-- **NotificationDropdown** - Bell icon with notification list
-- **UserAvatar** - With status indicator
-
-### 3.3 Color Scheme
-- Primary: Teal/Blue gradient
-- Success: Green (#10B981)
-- Warning: Amber (#F59E0B)
-- Error: Red (#EF4444)
-- Card backgrounds with subtle gradients
+### 4.3 Footer
+- Copyright info
+- Version number
+- Quick links
+- Support contact
 
 ---
 
-## 4. Checkout Page Fixes
+## 5. User Dashboard Enhancements
 
-### 4.1 Public Access Without Auth
-- Create `get-transaction-by-ref` edge function for public lookup
-- Remove Supabase client dependency for checkout
-- Handle "invalid ref id" message when no ref provided
+### 5.1 Overview Page
+- Replace "Total Pendapatan" with "Saldo Anda" (transaction amount after fee deduction)
+- Show realtime transaction status updates
+- Admin-configurable info boxes/slides
+- Quick action cards
+- Recent transactions with payment links
+- Balance display
+- Notification preview
 
-### 4.2 UI Improvements
-- Better QR code display with download option
-- Copy button for VA number and payment code
-- Real-time countdown timer
-- Status indicators with animations
-- Mobile-optimized layout
+### 5.2 Create Transaction (Simplified)
+- Payment method selector (QRIS/VA/Retail)
+- Amount input only
+- Expiry time selector (min 5 minutes)
+- Channel selector (for VA/Retail)
+- Optional customer info
+- Direct "Go to Payment" button after creation
 
-### 4.3 Invalid Reference Handling
-- Show clear error page when ref is missing or invalid
-- Provide contact information for support
+### 5.3 Transaction History
+- Realtime status updates
+- Payment link display for pending
+- Filter by status, date, method
+- Export functionality
+- Click to view details
 
----
+### 5.4 Notifications Page
+- List all notifications
+- Mark as read
+- Realtime updates
+- Filter by type
 
-## 5. Transaction Improvements
+### 5.5 KYC Page
+**For Users (Merchants):**
+- Step-by-step form:
+  1. Personal Data (Name, NIK, Address)
+  2. Business Data (Name, Type, Address)
+  3. Document Upload (KTP photo, Selfie holding KTP, Business/home photo)
+- Status display (Pending/Approved/Rejected)
+- Cannot edit after submission (must contact admin)
+- Live chat button to contact admin
 
-### 5.1 Create Transaction Page
-- Add "Go to Payment" button after creation
-- Show payment link with copy button
-- Add redirect to payment link option
+**Admin is exempt from KYC requirement**
 
-### 5.2 Transaction History
-- Show payment link for pending transactions
-- Click to open in new tab
-- Add "Copy Link" and "Open Link" actions
-- Filter by date range
-- Export to CSV/Excel
-
----
-
-## 6. QRIS Fee Configuration
-
-### 6.1 Tiered Fee Structure
-- Fee below threshold (e.g., < 500,000): Configurable (default 0%)
-- Fee above threshold (e.g., >= 500,000): Configurable (default 0.5%)
-
-### 6.2 Fee Settings UI
-- Add threshold amount input
-- Separate fee inputs for below/above threshold
-- Preview calculator
-
-### 6.3 Fee Calculation Logic
-- Update `calculateFee` function in all relevant files
-- Update edge functions to use tiered fees
+### 5.6 Profile Page
+- View profile info
+- View balance and history
+- View KYC status
 
 ---
 
-## 7. API & Response Alignment
+## 6. Admin Dashboard Enhancements
 
-### 7.1 Fix API Key Validation
-- Check `user_api_settings` table properly
-- Add proper error messages
-- Log validation attempts
+### 6.1 User Management
+- Enhanced KYC review panel with image preview
+- Approve/Reject with reason
+- Suspend/Unsuspend functionality
+- Balance management
+- Send notifications (text, image)
+- View user transactions
 
-### 7.2 Response Format (sanpay.site compatible)
+### 6.2 Notifications Panel
+- Send broadcast to all users
+- Send to specific user
+- Support text and image attachments
+- View sent notifications
 
-**QRIS Response:**
-```json
-{
-  "status": "success",
-  "partnerReferenceNo": "INV-123",
-  "merchantName": "Merchant Name",
-  "amount": 50000,
-  "qrContent": "00020101...",
-  "expiresAt": "2025-01-01 12:00:00"
-}
+### 6.3 Live Chat
+- View all active chats
+- Reply to user messages
+- Realtime updates
+- Mark as resolved
+
+### 6.4 Dashboard Widgets
+- Add/edit info boxes for user dashboard
+- Add/edit slide images
+- Configure widget order
+
+### 6.5 Merchant QRIS Requests
+- View all QRIS merchant requests
+- Approve/Reject applications
+- Status management
+
+---
+
+## 7. API Settings Page Enhancement
+
+### 7.1 Webhook Configuration
+- Display callback URL for sanpay.site:
+  `https://tlfnpkhwxmcajklkozor.supabase.co/functions/v1/sanpay-webhook`
+- Display IP to whitelist: `103.127.137.140`
+- Webhook URL input for merchant callbacks
+- Test webhook button
+
+### 7.2 API Tester
+- Select endpoint (QRIS, VA, Retail, Check Transaction)
+- Input parameters form
+- Execute button
+- Response display with formatting
+- Copy curl command
+
+### 7.3 Full Documentation
+- Introduction & Authentication
+- All endpoints with examples
+- Code samples (cURL, PHP, Node.js, Python)
+- Webhook handling guide
+- Error codes reference
+- Rate limits info
+
+---
+
+## 8. Checkout Page Enhancement
+
+- Mobile-first responsive design
+- Professional branded header
+- QR code with download
+- VA/Retail code with copy
+- Countdown timer
+- Payment instructions
+- Realtime status updates
+- Success/expired animations
+
+---
+
+## 9. Real-time Features
+
+### 9.1 Transaction Status Updates
+- Supabase Realtime subscription on transactions table
+- Auto-update UI when status changes
+- Toast notifications for status changes
+
+### 9.2 Notification Bell
+- Realtime notification count
+- Dropdown list with recent notifications
+- Mark as read on click
+
+### 9.3 Live Chat
+- Realtime message delivery
+- Typing indicators
+- Message read status
+- Admin presence indicator
+
+### 9.4 Auto-Expire Transactions
+- Background check every minute
+- Compare with WIB timezone (Asia/Jakarta)
+- Update status to 'expired'
+- Send notification to user
+
+---
+
+## 10. Technical Implementation
+
+### 10.1 File Structure
+```text
+src/
+  pages/
+    Index.tsx (Landing page)
+    dashboard/
+      Overview.tsx (Enhanced)
+      CreateTransaction.tsx (Simplified)
+      Transactions.tsx (Enhanced)
+      Notifications.tsx (New)
+      Kyc.tsx (New)
+      Profile.tsx (Enhanced)
+      ApiSettings.tsx (Enhanced with tester)
+      Documentation.tsx (Full docs)
+      Chat.tsx (New - user side)
+      MerchantQris.tsx (New - coming soon)
+    admin/
+      UserManagement.tsx (Enhanced)
+      LiveChat.tsx (New)
+      DashboardWidgets.tsx (New)
+      MerchantQrisRequests.tsx (New)
+  components/
+    layout/
+      DashboardLayout.tsx (Enhanced)
+      LandingLayout.tsx (New)
+      Navbar.tsx (New)
+      Sidebar.tsx (New)
+      Footer.tsx (New)
+    dashboard/
+      NotificationBell.tsx (New)
+      ChatWidget.tsx (New)
+      BalanceCard.tsx (New)
+      InfoSlider.tsx (New)
+    kyc/
+      KycForm.tsx (New)
+      KycStatus.tsx (New)
+      KycReview.tsx (New)
+    api/
+      ApiTester.tsx (New)
+    chat/
+      ChatWindow.tsx (New)
+      MessageBubble.tsx (New)
+
+supabase/functions/
+  check-transaction/ (New)
+  sanpay-webhook/ (New)
+  expire-transactions/ (New - cron)
 ```
 
-**VA Response:**
-```json
-{
-  "status": "success",
-  "partnerReferenceNo": "INV-123",
-  "amount": 50000,
-  "bank_code": "BCA",
-  "va_number": "1234567890",
-  "expiration_date": "2025-01-01T12:00:00+07:00"
-}
-```
-
-**Retail Response:**
-```json
-{
-  "status": "success",
-  "partnerReferenceNo": "INV-123",
-  "amount": 50000,
-  "retail_outlet": "ALFAMART",
-  "payment_code": "888812345678",
-  "expiration_date": "2025-01-01T12:00:00+07:00"
-}
-```
-
----
-
-## 8. User Management Enhancements
-
-### 8.1 KYC System
-- KYC submission form for users
-- Admin review panel with approve/reject
-- Status badges (Pending, Approved, Rejected)
-
-### 8.2 Suspend/Unsuspend
-- One-click suspend with reason input
-- Suspended users cannot login
-- Show suspension notice on login attempt
-
-### 8.3 Notifications
-- Broadcast to all users
-- Targeted notification to specific user
-- Notification center in header
-- Mark as read functionality
-
-### 8.4 User Balance
-- View balance on profile
-- Admin can add/deduct balance
-- Balance history/transactions
-
----
-
-## 9. API Documentation
-
-### 9.1 User-Facing Documentation Page
-- Markdown-rendered docs
-- Code examples in multiple languages (cURL, PHP, Node.js, Python)
-- Interactive API tester
-- Error code reference
-
-### 9.2 Documentation Sections
-- Authentication (API Key usage)
-- Create Payment (QRIS, VA, Retail)
-- Webhook handling
-- Error codes
-- Rate limits
-
----
-
-## 10. Edge Functions Updates
-
-### 10.1 `user-create-payment` Updates
-- Fix API key validation (query `user_api_settings` correctly)
-- Add proper HMAC signature generation
-- Return sanpay-compatible responses
-
-### 10.2 `get-transaction-by-ref` (New)
-- Public endpoint for checkout page
-- No auth required
-- Returns transaction details by reference number
-
-### 10.3 `payment-callback` Updates
-- Improve webhook forwarding
-- Add retry logic for failed webhook deliveries
-- Log all callback attempts
-
----
-
-## 11. File Changes Summary
-
-### New Files
-- `src/pages/dashboard/Documentation.tsx` - API documentation page
-- `src/pages/admin/Notifications.tsx` - Send notifications
-- `src/pages/admin/KycManagement.tsx` - KYC review
-- `src/components/dashboard/ChartCard.tsx` - Analytics charts
-- `src/components/dashboard/NotificationBell.tsx` - Notification dropdown
-- `src/components/ui/data-table.tsx` - Enhanced data table
-- `supabase/functions/get-transaction-by-ref/index.ts` - Public transaction lookup
-
-### Modified Files
-- `src/index.css` - TailAdmin-style CSS variables
-- `src/pages/Checkout.tsx` - Fix public access, invalid ref handling
-- `src/pages/dashboard/Transactions.tsx` - Add payment link display
-- `src/pages/dashboard/CreateTransaction.tsx` - Add redirect button
-- `src/pages/admin/FeeSettings.tsx` - Tiered fee UI
-- `src/pages/admin/UserManagement.tsx` - KYC, suspend, balance, notifications
-- `src/components/layout/DashboardLayout.tsx` - TailAdmin-style layout
-- `supabase/functions/user-create-payment/index.ts` - Fix validation, response format
-- `supabase/functions/payment-callback/index.ts` - Improve webhook handling
-
-### Database Migrations
-- Add `user_balance` table
-- Add `user_kyc` table
-- Add `notifications` table
-- Update `profiles` with suspension fields
-- Update `fee_settings` with tiered fee fields
-- Update RLS policies for security
-
----
-
-## 12. Technical Implementation Details
-
-### Fee Calculation Formula
+### 10.2 Fee Calculation for User Balance
 ```typescript
-function calculateQrisFee(amount: number, settings: FeeSettings): number {
-  const threshold = settings.threshold_amount || 500000;
-  let baseFee = 0;
-  
-  if (amount < threshold) {
-    baseFee = settings.fee_below_threshold || 0;
-  } else {
-    baseFee = (amount * (settings.fee_above_threshold || 0.5)) / 100;
-  }
-  
-  // Add markup
-  let markupFee = 0;
-  if (settings.markup_fee_type === 'fixed') {
-    markupFee = settings.markup_fee_value;
-  } else {
-    markupFee = (amount * settings.markup_fee_value) / 100;
-  }
-  
-  return Math.ceil(baseFee + markupFee);
-}
+// User balance = sum of (amount - admin_fee) for paid transactions
+const userBalance = transactions
+  .filter(t => t.status === 'paid')
+  .reduce((sum, t) => sum + (t.amount - t.admin_fee), 0);
 ```
 
-### API Signature Validation
+### 10.3 WIB Timezone Handling
 ```typescript
-async function validateSignature(
-  payload: string, 
-  signature: string, 
-  secret: string
-): Promise<boolean> {
-  const encoder = new TextEncoder();
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
-  );
-  const signatureBuffer = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
-  const calculatedSignature = Array.from(new Uint8Array(signatureBuffer))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
-  return calculatedSignature === signature;
-}
+// Convert to WIB for expiry comparison
+const wibOffset = 7 * 60 * 60 * 1000; // UTC+7
+const nowWib = new Date(Date.now() + wibOffset);
 ```
 
 ---
 
-## 13. Implementation Order
+## 11. Implementation Order
 
-1. **Database migrations** - Create new tables and update existing ones
-2. **RLS policy fixes** - Secure transactions and fee_settings
-3. **Edge function updates** - Fix API key validation, add public transaction lookup
-4. **Checkout page fixes** - Public access, invalid ref handling
-5. **Transaction improvements** - Payment link display and redirect
-6. **Fee settings UI** - Tiered fee configuration
-7. **User management features** - KYC, suspend, balance, notifications
-8. **UI modernization** - TailAdmin-style dashboard
-9. **API documentation** - User-friendly docs page
-10. **Testing** - End-to-end testing of all flows
+1. **Database Migrations**
+   - Create new tables (chat_messages, dashboard_widgets, merchant_qris_requests)
+   - Update user_kyc table with new fields
+   - Enable realtime on required tables
+   - Add RLS policies
+
+2. **Edge Functions**
+   - Create check-transaction endpoint
+   - Create sanpay-webhook endpoint
+   - Create expire-transactions cron job
+   - Update config.toml
+
+3. **Landing Page**
+   - Create professional landing page
+   - Add routing for `/`
+
+4. **Dashboard Layout**
+   - Enhance sidebar with collapsible groups
+   - Add navbar with notification bell
+   - Add footer component
+   - Implement dark mode toggle
+
+5. **User Dashboard Pages**
+   - Enhance Overview with balance display
+   - Simplify CreateTransaction
+   - Add Notifications page
+   - Create KYC submission page
+   - Add Chat page
+
+6. **Admin Dashboard Pages**
+   - Enhance UserManagement with KYC review
+   - Add LiveChat page
+   - Add DashboardWidgets management
+   - Add MerchantQrisRequests page
+
+7. **API Settings Enhancement**
+   - Add webhook URL display
+   - Add IP whitelist display
+   - Create API tester component
+   - Complete documentation
+
+8. **Real-time Integration**
+   - Add Supabase Realtime subscriptions
+   - Implement notification bell
+   - Add live chat functionality
+   - Auto-expire transaction monitoring
+
+---
+
+## 12. Security Considerations
+
+- Admin users are exempt from KYC requirements (checked via user_roles table)
+- KYC data locked after submission (only admin can modify)
+- All file uploads go to Supabase Storage with proper RLS
+- API endpoints validate authentication
+- Webhook endpoint validates IP and signature
+- Chat messages have proper RLS (sender/receiver only)
+
+---
+
+## 13. Responsive Design
+
+All pages will be fully responsive:
+- Mobile-first approach
+- Collapsible sidebar on tablet/mobile
+- Touch-friendly interactions
+- Optimized checkout for mobile payments
+- Bottom navigation option for mobile
 
 ---
 
 ## 14. Testing Checklist
 
-- [ ] Checkout page accessible without login
-- [ ] Invalid ref shows error message
-- [ ] Payment link displayed after transaction creation
-- [ ] Payment link clickable in transaction history
-- [ ] QRIS fee correctly calculated for amounts below/above 500k
-- [ ] API key validation works correctly
-- [ ] Webhook forwarding works
-- [ ] User suspension prevents login
-- [ ] Notifications sent and received
-- [ ] KYC submission and review flow works
+- [ ] Landing page displays correctly on all devices
+- [ ] User can create transaction with just amount and expiry
+- [ ] Payment link works and shows realtime status
+- [ ] Transactions auto-expire at correct WIB time
+- [ ] User balance shows correct calculation
+- [ ] KYC form submits with all required documents
+- [ ] Admin can review KYC with image preview
+- [ ] Live chat works in realtime
+- [ ] Notification bell updates in realtime
+- [ ] API tester works for all endpoints
+- [ ] Webhook endpoint receives and processes callbacks
+- [ ] Check transaction API returns correct data
+
