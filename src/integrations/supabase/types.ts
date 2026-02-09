@@ -77,6 +77,84 @@ export type Database = {
         }
         Relationships: []
       }
+      chat_messages: {
+        Row: {
+          attachment_url: string | null
+          created_at: string | null
+          id: string
+          is_read: boolean | null
+          is_resolved: boolean | null
+          message: string
+          message_type: Database["public"]["Enums"]["chat_message_type"] | null
+          receiver_id: string | null
+          sender_id: string
+        }
+        Insert: {
+          attachment_url?: string | null
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          is_resolved?: boolean | null
+          message: string
+          message_type?: Database["public"]["Enums"]["chat_message_type"] | null
+          receiver_id?: string | null
+          sender_id: string
+        }
+        Update: {
+          attachment_url?: string | null
+          created_at?: string | null
+          id?: string
+          is_read?: boolean | null
+          is_resolved?: boolean | null
+          message?: string
+          message_type?: Database["public"]["Enums"]["chat_message_type"] | null
+          receiver_id?: string | null
+          sender_id?: string
+        }
+        Relationships: []
+      }
+      dashboard_widgets: {
+        Row: {
+          content: string | null
+          created_at: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean | null
+          link_url: string | null
+          order_index: number | null
+          target_role: string | null
+          title: string | null
+          type: Database["public"]["Enums"]["widget_type"]
+          updated_at: string | null
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          link_url?: string | null
+          order_index?: number | null
+          target_role?: string | null
+          title?: string | null
+          type: Database["public"]["Enums"]["widget_type"]
+          updated_at?: string | null
+        }
+        Update: {
+          content?: string | null
+          created_at?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          link_url?: string | null
+          order_index?: number | null
+          target_role?: string | null
+          title?: string | null
+          type?: Database["public"]["Enums"]["widget_type"]
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       fee_settings: {
         Row: {
           base_fee_type: Database["public"]["Enums"]["fee_type"]
@@ -131,6 +209,51 @@ export type Database = {
           min_amount?: number | null
           threshold_amount?: number | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      merchant_qris_requests: {
+        Row: {
+          business_address: string | null
+          business_name: string
+          business_type: string | null
+          created_at: string | null
+          id: string
+          notes: string | null
+          qris_nmid: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: Database["public"]["Enums"]["merchant_request_status"] | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          business_address?: string | null
+          business_name: string
+          business_type?: string | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          qris_nmid?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["merchant_request_status"] | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          business_address?: string | null
+          business_name?: string
+          business_type?: string | null
+          created_at?: string | null
+          id?: string
+          notes?: string | null
+          qris_nmid?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: Database["public"]["Enums"]["merchant_request_status"] | null
+          updated_at?: string | null
+          user_id?: string
         }
         Relationships: []
       }
@@ -340,14 +463,23 @@ export type Database = {
       }
       user_kyc: {
         Row: {
+          business_address: string | null
+          business_name: string | null
+          business_photo_url: string | null
+          business_type: string | null
           created_at: string | null
           id: string
           id_number: string | null
           id_photo_url: string | null
           id_type: string | null
+          ktp_photo_url: string | null
+          owner_address: string | null
+          owner_name: string | null
+          owner_nik: string | null
           rejection_reason: string | null
           reviewed_at: string | null
           reviewed_by: string | null
+          selfie_ktp_photo_url: string | null
           selfie_url: string | null
           status: Database["public"]["Enums"]["kyc_status"] | null
           submitted_at: string | null
@@ -355,14 +487,23 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          business_address?: string | null
+          business_name?: string | null
+          business_photo_url?: string | null
+          business_type?: string | null
           created_at?: string | null
           id?: string
           id_number?: string | null
           id_photo_url?: string | null
           id_type?: string | null
+          ktp_photo_url?: string | null
+          owner_address?: string | null
+          owner_name?: string | null
+          owner_nik?: string | null
           rejection_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          selfie_ktp_photo_url?: string | null
           selfie_url?: string | null
           status?: Database["public"]["Enums"]["kyc_status"] | null
           submitted_at?: string | null
@@ -370,14 +511,23 @@ export type Database = {
           user_id: string
         }
         Update: {
+          business_address?: string | null
+          business_name?: string | null
+          business_photo_url?: string | null
+          business_type?: string | null
           created_at?: string | null
           id?: string
           id_number?: string | null
           id_photo_url?: string | null
           id_type?: string | null
+          ktp_photo_url?: string | null
+          owner_address?: string | null
+          owner_name?: string | null
+          owner_nik?: string | null
           rejection_reason?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          selfie_ktp_photo_url?: string | null
           selfie_url?: string | null
           status?: Database["public"]["Enums"]["kyc_status"] | null
           submitted_at?: string | null
@@ -438,11 +588,14 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      chat_message_type: "text" | "image" | "file"
       fee_type: "fixed" | "percent"
       kyc_status: "pending" | "approved" | "rejected"
+      merchant_request_status: "pending" | "approved" | "rejected"
       notification_type: "info" | "warning" | "success" | "error"
       payment_method: "qris" | "va" | "retail"
       transaction_status: "pending" | "paid" | "expired" | "failed"
+      widget_type: "info_box" | "slide" | "banner" | "announcement"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -571,11 +724,14 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      chat_message_type: ["text", "image", "file"],
       fee_type: ["fixed", "percent"],
       kyc_status: ["pending", "approved", "rejected"],
+      merchant_request_status: ["pending", "approved", "rejected"],
       notification_type: ["info", "warning", "success", "error"],
       payment_method: ["qris", "va", "retail"],
       transaction_status: ["pending", "paid", "expired", "failed"],
+      widget_type: ["info_box", "slide", "banner", "announcement"],
     },
   },
 } as const
