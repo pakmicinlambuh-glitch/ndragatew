@@ -20,6 +20,7 @@ import Chat from "./pages/dashboard/Chat";
 import MerchantQris from "./pages/dashboard/MerchantQris";
 import UserApiSettings from "./pages/dashboard/ApiSettings";
 import Documentation from "./pages/dashboard/Documentation";
+import Withdraw from "./pages/dashboard/Withdraw";
 import AdminTransactions from "./pages/admin/AdminTransactions";
 import UserManagement from "./pages/admin/UserManagement";
 import AdminApiSettings from "./pages/admin/ApiSettings";
@@ -28,6 +29,8 @@ import Reports from "./pages/admin/Reports";
 import LiveChat from "./pages/admin/LiveChat";
 import DashboardWidgets from "./pages/admin/DashboardWidgets";
 import MerchantQrisRequests from "./pages/admin/MerchantQrisRequests";
+import Withdrawals from "./pages/admin/Withdrawals";
+import AdminBalance from "./pages/admin/AdminBalance";
 import Checkout from "./pages/Checkout";
 import NotFound from "./pages/NotFound";
 

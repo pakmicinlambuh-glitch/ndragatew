@@ -14,6 +14,14 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Handle non-POST requests gracefully
+    if (req.method !== 'POST') {
+      return new Response(
+        JSON.stringify({ status: 'ok', message: 'Sanpay webhook endpoint active' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
@@ -25,16 +33,23 @@ Deno.serve(async (req) => {
 
     console.log(`Webhook received from IP: ${clientIp}`);
 
-    // Validate IP (optional - can be disabled for testing)
-    // if (!ALLOWED_IPS.includes(clientIp)) {
-    //   console.warn(`Unauthorized IP: ${clientIp}`);
-    //   return new Response(
-    //     JSON.stringify({ status: 'error', message: 'Unauthorized IP' }),
-    //     { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    //   );
-    // }
-
-    const body = await req.json();
+    // Parse body safely
+    let body: Record<string, unknown>;
+    try {
+      const text = await req.text();
+      if (!text || text.trim() === '') {
+        return new Response(
+          JSON.stringify({ status: 'error', message: 'Empty request body' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      body = JSON.parse(text);
+    } catch {
+      return new Response(
+        JSON.stringify({ status: 'error', message: 'Invalid JSON body' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     console.log('Webhook payload:', JSON.stringify(body));
 
     // Extract webhook data - support multiple formats
