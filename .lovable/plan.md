@@ -1,473 +1,306 @@
 
 
-# CinGateway - Comprehensive Professional Upgrade Plan
+# CinGateway - Comprehensive Fix & Upgrade Plan
 
 ## Overview
 
-This plan covers a massive upgrade to transform CinGateway into a full-featured professional payment gateway aggregator system with:
-- Transaction check API & webhook endpoint
-- Real-time transaction expiry monitoring
-- Enhanced KYC system (admin exempt, merchants need full verification)
-- Full WebSocket/realtime integration
-- Simplified transaction creation (amount + expiry only)
-- Professional TailAdmin-style dashboard with navbar, sidebar, footer
-- Landing page for public visitors
-- Live chat system (user to admin)
-- Merchant QRIS feature (coming soon)
-- Complete API documentation with test functionality
+This plan addresses all requested fixes and upgrades across the entire application: balance system, checkout UI, notification system, API settings restructuring, withdrawal forms, admin dashboard stats, live chat upgrade, KYC review tools, webhook fix, and UI/UX improvements.
 
 ---
 
-## 1. New Edge Functions
+## 1. Fix sanpay-webhook Internal Server Error
 
-### 1.1 Check Transaction API (`check-transaction`)
-Public endpoint for checking transaction status by reference number.
+**Problem**: The webhook crashes with `SyntaxError: Unexpected end of JSON input` when receiving requests with empty or non-JSON bodies (e.g. health checks, bots).
 
-```text
+**Fix**: Add a try/catch around `req.json()` and validate content-type before parsing. Also handle GET/HEAD requests gracefully.
+
+---
+
+## 2. Balance System Overhaul (Admin & Merchant)
+
+### 2.1 Database Changes
+- Create `withdrawal_requests` table:
+  - `id`, `user_id`, `amount`, `bank_name`, `account_number`, `account_holder`, `type` (bank/ewallet), `status` (pending/approved/rejected), `admin_notes`, `processed_by`, `processed_at`, `created_at`
+- Add RLS policies for withdrawal requests
+
+### 2.2 Admin Dashboard Overview
+Complete rewrite with comprehensive stats:
+- Total Saldo Semua User (sum of user_balance)
+- Saldo Admin (fee collected minus base sanpay fee)
+- Total User terdaftar
+- Total Request KYC pending
+- Total Request Penarikan pending
+- Total Penarikan yang diproses
+- Total Transaksi bulan ini
+- Total Saldo bulan ini
+- Total Transaksi sukses/gagal/expired
+- Recent activity feed
+
+### 2.3 Merchant Dashboard
+- "Saldo Anda" reads from `user_balance` table (already exists)
+- Add withdrawal form with bank & e-wallet options
+- Show withdrawal history
+
+### 2.4 Admin Balance Page (new route `/admin/balance`)
+- View admin's own transaction balance
+- View total fee collected (markup fee portion)
+- Withdrawal request management (approve/reject with notes)
+
+---
+
+## 3. Checkout Page Upgrade
+
+### 3.1 Remove "Pelanggan" / "Customer" section
+- Remove the `customerName` display row from checkout
+- Remove "Salin Data" button for QRIS
+
+### 3.2 QRIS Image Click-to-Zoom
+- Add a modal/dialog that shows the QR code full-screen when clicked
+- Use Radix Dialog for the lightbox
+
+### 3.3 Expired QRIS Shows Expired Image
+- When status is expired, show a grayed-out overlay on the QR with "EXPIRED" text instead of the QR image
+
+---
+
+## 4. Notification System Upgrade
+
+### 4.1 Admin Can Delete Notifications
+- Add delete button per notification in admin view
+- Add bulk delete option
+- Add RLS policy for admin DELETE on notifications
+
+### 4.2 Header Notification Bell Upgrade
+- Replace simple navigate-to-page with a dropdown popover
+- Show last 5 notifications in dropdown
+- "Mark all as read" button in dropdown
+- "View all" link to notifications page
+- Real-time counter update
+- Clear visual indicator (red dot) for unread
+
+### 4.3 Accurate Notification System
+- Ensure notification count respects both personal and broadcast
+- Fix subscription to handle UPDATE events (mark as read) to update counter
+
+---
+
+## 5. User/Merchant API & Webhook Page Restructure
+
+### 5.1 Remove "Konfigurasi Webhook Sanpay" for User Role
+- This section is admin-only configuration, remove from user API page
+
+### 5.2 User API Page Sections
+Only show:
+1. **API Key** - show/copy/regenerate
+2. **Webhook Anda** - user's own webhook URL + secret
+3. **Dokumentasi API** - complete with all endpoints including check status
+
+### 5.3 Add Check Status API Documentation
+Add documentation for:
+```
 GET /functions/v1/check-transaction?ref=REFERENCE_NO
-Headers: X-API-Key (optional for authenticated details)
+Headers: X-API-Key: your-api-key
 ```
+With response examples.
 
-Response:
-```json
-{
-  "status": "success",
-  "data": {
-    "partnerReferenceNo": "INV-001",
-    "status": "pending|paid|expired",
-    "amount": 50000,
-    "payment_method": "qris",
-    "expires_at": "2025-02-09T12:00:00Z",
-    "paid_at": null
-  }
-}
-```
-
-### 1.2 Webhook Endpoint (`sanpay-webhook`)
-Dedicated endpoint for sanpay.site callbacks with proper IP validation.
-
-```text
-POST /functions/v1/sanpay-webhook
-Headers: X-Merchant-Code, X-Signature
-IP Whitelist: 103.127.137.140
-```
-
-### 1.3 Auto-Expire Transactions (`expire-transactions`)
-Cron job function to automatically expire pending transactions past their expiry time (WIB timezone).
+### 5.4 Merge "API Credentials" with "API & Webhook"
+Combine into a single unified page with tabs or sections.
 
 ---
 
-## 2. Database Schema Updates
+## 6. Admin API Settings (Pengaturan API) Restructure
 
-### 2.1 New Tables
+### 6.1 Replace Callback URL Section
+Replace the current editable callback URL with the Sanpay Webhook Configuration display:
+- **Konfigurasi Webhook Sanpay** header
+- Description: "Konfigurasi ini untuk menghubungkan ke website resmi sanpay.site"
+- Callback URL (read-only): `https://tlfnpkhwxmcajklkozor.supabase.co/functions/v1/sanpay-webhook`
+- Copy button
+- Note: "Masukkan URL ini sebagai callback URL di dashboard sanpay.site"
+- IP Whitelist: `103.127.137.140` with copy button
+- Note: "Whitelist IP ini di firewall server Anda untuk menerima callback dari sanpay.site"
 
-**merchant_qris_requests** (Coming Soon feature):
+### 6.2 Keep API Credentials (API Key + Merchant Code)
+### 6.3 Keep Channel Sync
+
+---
+
+## 7. KYC Review System (Admin) - Full Tools
+
+### 7.1 Enhanced KYC Review Panel in UserManagement
+- Photo preview with zoom/lightbox
+- Per-field validation status (valid/invalid checkmarks)
+- Admin can add comments per field (e.g., "Foto KTP buram, minta update")
+- "Request Update" button that sends notification to user specifying which document needs re-upload
+- Review data usaha section with approve/reject per section
+- Detailed rejection reason with specific field mentions
+- Overall approve/reject with comprehensive notes
+
+---
+
+## 8. Live Chat - Full Interactive Upgrade
+
+### 8.1 User Chat Page
+- Full-height chat interface
+- Message timestamps
+- "Typing..." indicator (visual only)
+- Auto-scroll to bottom
+- Enter key to send
+- Online status indicator for admin
+
+### 8.2 Admin Chat Page - Telegram-style
+- Left sidebar: conversation list with search, unread badges, last message preview, timestamps
+- Right panel: full chat window
+- Responsive: on mobile, show list first, tap to open chat
+- Mark as resolved button
+- User info header (email, KYC status)
+- Quick reply suggestions
+- Message read receipts (double check)
+
+---
+
+## 9. Withdrawal System (New)
+
+### 9.1 User Withdrawal Form (`/dashboard/withdraw`)
+- Select type: Bank Transfer or E-Wallet
+- Bank: bank name, account number, account holder name
+- E-Wallet: provider (GoPay, OVO, DANA, etc.), phone number, account name
+- Amount input (max = current balance)
+- Show current balance
+- Submit creates `withdrawal_requests` record with status "pending"
+
+### 9.2 Admin Withdrawal Management (`/admin/withdrawals`)
+- List all withdrawal requests with filters
+- Approve/reject with admin notes
+- On approve: deduct from user_balance via `adjust_user_balance` function
+- Show user details (email, balance)
+
+---
+
+## 10. Admin QRIS Merchant Page
+
+- Change from request management to listing all merchant QRIS data
+- Show table: merchant email, business name, QRIS NMID, status, created date
+- Admin does not need to request QRIS, only views list
+- Filter/search functionality
+
+---
+
+## 11. Sidebar & Navigation Updates
+
+### 11.1 Add New Menu Items
+- User: Add "Penarikan Saldo" menu item
+- Admin: Add "Saldo & Penarikan" menu item
+- Admin: Rename QRIS Merchant to "Data QRIS Merchant"
+
+### 11.2 Differentiate Admin vs User Menus
+- Ensure admin menu and user menu are completely different feature sets
+- Admin should not see "Buat Transaksi" in user menu (or if they do, it's for testing)
+
+---
+
+## 12. Create Transaction UI Upgrade
+
+- Better card-based payment method selector with icons and descriptions
+- Animated selection feedback
+- Better fee breakdown visualization
+- Success state with confetti-like animation
+- Remove hardcoded "Customer" name from transaction insert
+
+---
+
+## 13. UI/UX Improvements
+
+### 13.1 Remove Emoticons
+- Replace all emoji usage (e.g., wave emoji in welcome header) with Lucide icons
+- Use icon-based visual elements throughout
+
+### 13.2 Landing Page Enhancement
+- Add more content sections
+- Better gradient animations
+- Meta tags for SEO (title, description, og tags)
+- Add visual assets/illustrations
+- Professional footer with more links
+
+### 13.3 Dashboard Styling
+- More visual depth with shadows and gradients
+- Better card hover effects
+- Consistent color scheme across admin and user dashboards
+
+---
+
+## 14. Realtime Transaction Expiry
+
+- Ensure transactions are updated to expired status regardless of whether checkout page is open
+- The `expire-transactions` edge function handles this server-side
+- Add realtime subscription on transactions table to auto-update UI
+- On checkout: if expired, show expired overlay on QRIS image
+
+---
+
+## Technical Implementation Details
+
+### Database Migration
 ```sql
-CREATE TABLE merchant_qris_requests (
+-- Withdrawal requests table
+CREATE TABLE public.withdrawal_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID REFERENCES profiles(user_id) NOT NULL,
-  business_name TEXT NOT NULL,
-  business_type TEXT,
-  qris_nmid TEXT,
-  status TEXT DEFAULT 'pending',
-  reviewed_by UUID,
-  reviewed_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT now()
+  user_id UUID NOT NULL,
+  amount BIGINT NOT NULL,
+  withdrawal_type TEXT NOT NULL, -- 'bank' or 'ewallet'
+  bank_name TEXT,
+  account_number TEXT NOT NULL,
+  account_holder TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  admin_notes TEXT,
+  processed_by UUID,
+  processed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- RLS policies
+ALTER TABLE public.withdrawal_requests ENABLE ROW LEVEL SECURITY;
+-- Users view own, admins view all, admins manage all
 ```
 
-**chat_messages** (Live chat):
-```sql
-CREATE TABLE chat_messages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  sender_id UUID NOT NULL,
-  receiver_id UUID,
-  message TEXT NOT NULL,
-  message_type TEXT DEFAULT 'text',
-  attachment_url TEXT,
-  is_read BOOLEAN DEFAULT false,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-```
-
-**dashboard_widgets** (Admin configurable):
-```sql
-CREATE TABLE dashboard_widgets (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  type TEXT NOT NULL,
-  title TEXT,
-  content TEXT,
-  image_url TEXT,
-  link_url TEXT,
-  is_active BOOLEAN DEFAULT true,
-  order_index INTEGER DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-```
-
-### 2.2 Update user_kyc Table
-Add new required fields:
-```sql
-ALTER TABLE user_kyc ADD COLUMN business_name TEXT;
-ALTER TABLE user_kyc ADD COLUMN business_type TEXT;
-ALTER TABLE user_kyc ADD COLUMN business_address TEXT;
-ALTER TABLE user_kyc ADD COLUMN owner_name TEXT;
-ALTER TABLE user_kyc ADD COLUMN owner_nik TEXT;
-ALTER TABLE user_kyc ADD COLUMN owner_address TEXT;
-ALTER TABLE user_kyc ADD COLUMN ktp_photo_url TEXT;
-ALTER TABLE user_kyc ADD COLUMN selfie_ktp_photo_url TEXT;
-ALTER TABLE user_kyc ADD COLUMN business_photo_url TEXT;
-ALTER TABLE user_kyc ADD COLUMN rejection_reason TEXT;
-```
-
-### 2.3 Enable Realtime
-```sql
-ALTER PUBLICATION supabase_realtime ADD TABLE transactions;
-ALTER PUBLICATION supabase_realtime ADD TABLE notifications;
-ALTER PUBLICATION supabase_realtime ADD TABLE chat_messages;
-```
-
----
-
-## 3. Landing Page (`/`)
-
-Professional payment gateway landing page with:
-- Hero section with animated gradient
-- Features showcase (QRIS, VA, Retail)
-- Pricing/fee information
-- Integration steps
-- Testimonials/trust badges
-- CTA buttons (Login/Register)
-- Footer with links and contact
-
----
-
-## 4. Dashboard Layout Upgrade
-
-### 4.1 Sidebar (Collapsible)
-- User section: Dashboard, Create Transaction, History, API & Docs, Notifications, Profile, KYC
-- Merchant section: QRIS Merchant (Coming Soon)
-- Admin section: All Transactions, Users, Fees, Settings, Reports, Live Chat, Widgets
-
-### 4.2 Top Navbar
-- Breadcrumb navigation
-- Search bar
-- Notification bell (realtime updates)
-- Live chat indicator (for admin)
-- User avatar dropdown (Profile, Settings, Logout)
-- Dark mode toggle
-
-### 4.3 Footer
-- Copyright info
-- Version number
-- Quick links
-- Support contact
-
----
-
-## 5. User Dashboard Enhancements
-
-### 5.1 Overview Page
-- Replace "Total Pendapatan" with "Saldo Anda" (transaction amount after fee deduction)
-- Show realtime transaction status updates
-- Admin-configurable info boxes/slides
-- Quick action cards
-- Recent transactions with payment links
-- Balance display
-- Notification preview
-
-### 5.2 Create Transaction (Simplified)
-- Payment method selector (QRIS/VA/Retail)
-- Amount input only
-- Expiry time selector (min 5 minutes)
-- Channel selector (for VA/Retail)
-- Optional customer info
-- Direct "Go to Payment" button after creation
-
-### 5.3 Transaction History
-- Realtime status updates
-- Payment link display for pending
-- Filter by status, date, method
-- Export functionality
-- Click to view details
-
-### 5.4 Notifications Page
-- List all notifications
-- Mark as read
-- Realtime updates
-- Filter by type
-
-### 5.5 KYC Page
-**For Users (Merchants):**
-- Step-by-step form:
-  1. Personal Data (Name, NIK, Address)
-  2. Business Data (Name, Type, Address)
-  3. Document Upload (KTP photo, Selfie holding KTP, Business/home photo)
-- Status display (Pending/Approved/Rejected)
-- Cannot edit after submission (must contact admin)
-- Live chat button to contact admin
-
-**Admin is exempt from KYC requirement**
-
-### 5.6 Profile Page
-- View profile info
-- View balance and history
-- View KYC status
-
----
-
-## 6. Admin Dashboard Enhancements
-
-### 6.1 User Management
-- Enhanced KYC review panel with image preview
-- Approve/Reject with reason
-- Suspend/Unsuspend functionality
-- Balance management
-- Send notifications (text, image)
-- View user transactions
-
-### 6.2 Notifications Panel
-- Send broadcast to all users
-- Send to specific user
-- Support text and image attachments
-- View sent notifications
-
-### 6.3 Live Chat
-- View all active chats
-- Reply to user messages
-- Realtime updates
-- Mark as resolved
-
-### 6.4 Dashboard Widgets
-- Add/edit info boxes for user dashboard
-- Add/edit slide images
-- Configure widget order
-
-### 6.5 Merchant QRIS Requests
-- View all QRIS merchant requests
-- Approve/Reject applications
-- Status management
-
----
-
-## 7. API Settings Page Enhancement
-
-### 7.1 Webhook Configuration
-- Display callback URL for sanpay.site:
-  `https://tlfnpkhwxmcajklkozor.supabase.co/functions/v1/sanpay-webhook`
-- Display IP to whitelist: `103.127.137.140`
-- Webhook URL input for merchant callbacks
-- Test webhook button
-
-### 7.2 API Tester
-- Select endpoint (QRIS, VA, Retail, Check Transaction)
-- Input parameters form
-- Execute button
-- Response display with formatting
-- Copy curl command
-
-### 7.3 Full Documentation
-- Introduction & Authentication
-- All endpoints with examples
-- Code samples (cURL, PHP, Node.js, Python)
-- Webhook handling guide
-- Error codes reference
-- Rate limits info
-
----
-
-## 8. Checkout Page Enhancement
-
-- Mobile-first responsive design
-- Professional branded header
-- QR code with download
-- VA/Retail code with copy
-- Countdown timer
-- Payment instructions
-- Realtime status updates
-- Success/expired animations
-
----
-
-## 9. Real-time Features
-
-### 9.1 Transaction Status Updates
-- Supabase Realtime subscription on transactions table
-- Auto-update UI when status changes
-- Toast notifications for status changes
-
-### 9.2 Notification Bell
-- Realtime notification count
-- Dropdown list with recent notifications
-- Mark as read on click
-
-### 9.3 Live Chat
-- Realtime message delivery
-- Typing indicators
-- Message read status
-- Admin presence indicator
-
-### 9.4 Auto-Expire Transactions
-- Background check every minute
-- Compare with WIB timezone (Asia/Jakarta)
-- Update status to 'expired'
-- Send notification to user
-
----
-
-## 10. Technical Implementation
-
-### 10.1 File Structure
-```text
-src/
-  pages/
-    Index.tsx (Landing page)
-    dashboard/
-      Overview.tsx (Enhanced)
-      CreateTransaction.tsx (Simplified)
-      Transactions.tsx (Enhanced)
-      Notifications.tsx (New)
-      Kyc.tsx (New)
-      Profile.tsx (Enhanced)
-      ApiSettings.tsx (Enhanced with tester)
-      Documentation.tsx (Full docs)
-      Chat.tsx (New - user side)
-      MerchantQris.tsx (New - coming soon)
-    admin/
-      UserManagement.tsx (Enhanced)
-      LiveChat.tsx (New)
-      DashboardWidgets.tsx (New)
-      MerchantQrisRequests.tsx (New)
-  components/
-    layout/
-      DashboardLayout.tsx (Enhanced)
-      LandingLayout.tsx (New)
-      Navbar.tsx (New)
-      Sidebar.tsx (New)
-      Footer.tsx (New)
-    dashboard/
-      NotificationBell.tsx (New)
-      ChatWidget.tsx (New)
-      BalanceCard.tsx (New)
-      InfoSlider.tsx (New)
-    kyc/
-      KycForm.tsx (New)
-      KycStatus.tsx (New)
-      KycReview.tsx (New)
-    api/
-      ApiTester.tsx (New)
-    chat/
-      ChatWindow.tsx (New)
-      MessageBubble.tsx (New)
-
-supabase/functions/
-  check-transaction/ (New)
-  sanpay-webhook/ (New)
-  expire-transactions/ (New - cron)
-```
-
-### 10.2 Fee Calculation for User Balance
-```typescript
-// User balance = sum of (amount - admin_fee) for paid transactions
-const userBalance = transactions
-  .filter(t => t.status === 'paid')
-  .reduce((sum, t) => sum + (t.amount - t.admin_fee), 0);
-```
-
-### 10.3 WIB Timezone Handling
-```typescript
-// Convert to WIB for expiry comparison
-const wibOffset = 7 * 60 * 60 * 1000; // UTC+7
-const nowWib = new Date(Date.now() + wibOffset);
-```
-
----
-
-## 11. Implementation Order
-
-1. **Database Migrations**
-   - Create new tables (chat_messages, dashboard_widgets, merchant_qris_requests)
-   - Update user_kyc table with new fields
-   - Enable realtime on required tables
-   - Add RLS policies
-
-2. **Edge Functions**
-   - Create check-transaction endpoint
-   - Create sanpay-webhook endpoint
-   - Create expire-transactions cron job
-   - Update config.toml
-
-3. **Landing Page**
-   - Create professional landing page
-   - Add routing for `/`
-
-4. **Dashboard Layout**
-   - Enhance sidebar with collapsible groups
-   - Add navbar with notification bell
-   - Add footer component
-   - Implement dark mode toggle
-
-5. **User Dashboard Pages**
-   - Enhance Overview with balance display
-   - Simplify CreateTransaction
-   - Add Notifications page
-   - Create KYC submission page
-   - Add Chat page
-
-6. **Admin Dashboard Pages**
-   - Enhance UserManagement with KYC review
-   - Add LiveChat page
-   - Add DashboardWidgets management
-   - Add MerchantQrisRequests page
-
-7. **API Settings Enhancement**
-   - Add webhook URL display
-   - Add IP whitelist display
-   - Create API tester component
-   - Complete documentation
-
-8. **Real-time Integration**
-   - Add Supabase Realtime subscriptions
-   - Implement notification bell
-   - Add live chat functionality
-   - Auto-expire transaction monitoring
-
----
-
-## 12. Security Considerations
-
-- Admin users are exempt from KYC requirements (checked via user_roles table)
-- KYC data locked after submission (only admin can modify)
-- All file uploads go to Supabase Storage with proper RLS
-- API endpoints validate authentication
-- Webhook endpoint validates IP and signature
-- Chat messages have proper RLS (sender/receiver only)
-
----
-
-## 13. Responsive Design
-
-All pages will be fully responsive:
-- Mobile-first approach
-- Collapsible sidebar on tablet/mobile
-- Touch-friendly interactions
-- Optimized checkout for mobile payments
-- Bottom navigation option for mobile
-
----
-
-## 14. Testing Checklist
-
-- [ ] Landing page displays correctly on all devices
-- [ ] User can create transaction with just amount and expiry
-- [ ] Payment link works and shows realtime status
-- [ ] Transactions auto-expire at correct WIB time
-- [ ] User balance shows correct calculation
-- [ ] KYC form submits with all required documents
-- [ ] Admin can review KYC with image preview
-- [ ] Live chat works in realtime
-- [ ] Notification bell updates in realtime
-- [ ] API tester works for all endpoints
-- [ ] Webhook endpoint receives and processes callbacks
-- [ ] Check transaction API returns correct data
+### New Routes
+- `/dashboard/withdraw` - User withdrawal form
+- `/admin/withdrawals` - Admin withdrawal management  
+- `/admin/balance` - Admin balance overview
+
+### Files to Create
+- `src/pages/dashboard/Withdraw.tsx`
+- `src/pages/admin/Withdrawals.tsx`
+- `src/pages/admin/AdminBalance.tsx`
+
+### Files to Modify (Major)
+- `supabase/functions/sanpay-webhook/index.ts` - Fix JSON parse error
+- `src/pages/Checkout.tsx` - Remove customer/salin data, add QR zoom, expired overlay
+- `src/pages/dashboard/Overview.tsx` - Admin stats overhaul, remove emoji
+- `src/pages/dashboard/ApiSettings.tsx` - Remove Sanpay config, add check-status docs
+- `src/pages/admin/ApiSettings.tsx` - Replace callback URL with Sanpay webhook display
+- `src/pages/dashboard/Notifications.tsx` - Admin delete capability
+- `src/components/layout/DashboardLayout.tsx` - Notification bell dropdown, new menu items
+- `src/pages/admin/LiveChat.tsx` - Telegram-style upgrade
+- `src/pages/dashboard/Chat.tsx` - Enhanced chat UI
+- `src/pages/dashboard/Kyc.tsx` - Complete requirements display
+- `src/pages/admin/UserManagement.tsx` - KYC review tools
+- `src/pages/admin/MerchantQrisRequests.tsx` - Change to list view
+- `src/pages/dashboard/CreateTransaction.tsx` - UI upgrade, remove hardcoded customer
+- `src/pages/Index.tsx` - Enhanced landing page
+- `src/App.tsx` - Add new routes
+
+### Implementation Order
+1. Database migration (withdrawal_requests table)
+2. Fix sanpay-webhook edge function
+3. Checkout page fixes (customer removal, QR zoom, expired state)
+4. Balance system (admin stats, withdrawal form/management)
+5. Notification system (admin delete, header bell dropdown)
+6. API settings restructure (admin and user)
+7. KYC review tools enhancement
+8. Live chat upgrade
+9. Create transaction UI upgrade
+10. Landing page and overall UI polish
+11. Route and navigation updates
 
