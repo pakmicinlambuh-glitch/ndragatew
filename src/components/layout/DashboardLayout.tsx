@@ -7,6 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,8 +45,12 @@ import {
   LayoutGrid,
   Moon,
   Sun,
+  Wallet,
+  ArrowDownCircle,
+  CheckCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
 
 interface NavItem {
   title: string;
@@ -54,10 +59,13 @@ interface NavItem {
   badge?: number;
 }
 
-interface NavGroup {
+interface Notification {
+  id: string;
   title: string;
-  items: NavItem[];
-  adminOnly?: boolean;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+  type: string | null;
 }
 
 interface DashboardLayoutProps {
@@ -75,13 +83,17 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [unreadChats, setUnreadChats] = useState(0);
   const [darkMode, setDarkMode] = useState(false);
+  const [recentNotifications, setRecentNotifications] = useState<Notification[]>([]);
+  const [bellOpen, setBellOpen] = useState(false);
 
   useEffect(() => {
     fetchNotificationCount();
+    fetchRecentNotifications();
     if (isAdmin) {
       fetchUnreadChats();
     }
-    subscribeToNotifications();
+    const cleanup = subscribeToNotifications();
+    return cleanup;
   }, [user, isAdmin]);
 
   const fetchNotificationCount = async () => {
@@ -92,6 +104,18 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       .or(`user_id.eq.${user.id},is_broadcast.eq.true`)
       .eq('is_read', false);
     setUnreadNotifications(count || 0);
+  };
+
+  const fetchRecentNotifications = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('notifications')
+      .select('*')
+      .or(`user_id.eq.${user.id},is_broadcast.eq.true`)
+      .eq('is_read', false)
+      .order('created_at', { ascending: false })
+      .limit(5);
+    setRecentNotifications((data as Notification[]) || []);
   };
 
   const fetchUnreadChats = async () => {
@@ -109,7 +133,12 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notifications' },
-        () => fetchNotificationCount()
+        () => { fetchNotificationCount(); fetchRecentNotifications(); }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'notifications' },
+        () => { fetchNotificationCount(); fetchRecentNotifications(); }
       )
       .on(
         'postgres_changes',
@@ -133,10 +162,23 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     document.documentElement.classList.toggle('dark');
   };
 
+  const markAllRead = async () => {
+    if (!user) return;
+    const ids = recentNotifications.map(n => n.id);
+    if (ids.length === 0) return;
+    await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .in('id', ids);
+    fetchNotificationCount();
+    fetchRecentNotifications();
+  };
+
   const userNavItems: NavItem[] = [
     { title: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="h-5 w-5" /> },
     { title: 'Buat Transaksi', href: '/dashboard/create', icon: <PlusCircle className="h-5 w-5" /> },
     { title: 'Riwayat Transaksi', href: '/dashboard/transactions', icon: <History className="h-5 w-5" /> },
+    { title: 'Penarikan Saldo', href: '/dashboard/withdraw', icon: <Wallet className="h-5 w-5" /> },
     { title: 'Notifikasi', href: '/dashboard/notifications', icon: <Bell className="h-5 w-5" />, badge: unreadNotifications },
     { title: 'API & Webhook', href: '/dashboard/api', icon: <Code className="h-5 w-5" /> },
     { title: 'Dokumentasi', href: '/dashboard/docs', icon: <BookOpen className="h-5 w-5" /> },
@@ -152,13 +194,68 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const adminNavItems: NavItem[] = [
     { title: 'Semua Transaksi', href: '/admin/transactions', icon: <Receipt className="h-5 w-5" /> },
     { title: 'Manajemen User', href: '/admin/users', icon: <Users className="h-5 w-5" /> },
+    { title: 'Saldo Admin', href: '/admin/balance', icon: <DollarSign className="h-5 w-5" /> },
+    { title: 'Penarikan', href: '/admin/withdrawals', icon: <ArrowDownCircle className="h-5 w-5" /> },
     { title: 'Pengaturan Fee', href: '/admin/fees', icon: <DollarSign className="h-5 w-5" /> },
     { title: 'Pengaturan API', href: '/admin/settings', icon: <Settings className="h-5 w-5" /> },
     { title: 'Laporan', href: '/admin/reports', icon: <FileText className="h-5 w-5" /> },
     { title: 'Live Chat', href: '/admin/chat', icon: <MessageCircle className="h-5 w-5" />, badge: unreadChats },
     { title: 'Dashboard Widgets', href: '/admin/widgets', icon: <LayoutGrid className="h-5 w-5" /> },
-    { title: 'QRIS Merchant', href: '/admin/merchant-qris', icon: <QrCode className="h-5 w-5" /> },
+    { title: 'Data QRIS Merchant', href: '/admin/merchant-qris', icon: <QrCode className="h-5 w-5" /> },
   ];
+
+  const NotificationBell = () => (
+    <Popover open={bellOpen} onOpenChange={setBellOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="icon" className="relative">
+          <Bell className="h-5 w-5" />
+          {unreadNotifications > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground">
+              {unreadNotifications > 9 ? '9+' : unreadNotifications}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0">
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <p className="text-sm font-semibold">Notifikasi</p>
+          {recentNotifications.length > 0 && (
+            <Button variant="ghost" size="sm" className="h-auto p-0 text-xs text-primary" onClick={markAllRead}>
+              Tandai Semua Dibaca
+            </Button>
+          )}
+        </div>
+        <div className="max-h-72 overflow-y-auto">
+          {recentNotifications.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <Bell className="h-8 w-8 text-muted-foreground/40" />
+              <p className="mt-2 text-sm text-muted-foreground">Tidak ada notifikasi baru</p>
+            </div>
+          ) : (
+            recentNotifications.map((notif) => (
+              <div key={notif.id} className="border-b px-4 py-3 last:border-b-0 hover:bg-muted/50 transition-colors">
+                <p className="text-sm font-medium">{notif.title}</p>
+                <p className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{notif.message}</p>
+                <p className="mt-1 text-[10px] text-muted-foreground/70">
+                  {format(new Date(notif.created_at), 'dd MMM yyyy, HH:mm')}
+                </p>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="border-t px-4 py-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-xs text-primary"
+            onClick={() => { setBellOpen(false); navigate('/dashboard/notifications'); }}
+          >
+            Lihat Semua Notifikasi
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 
   const NavContent = () => (
     <div className="flex h-full flex-col">
@@ -316,14 +413,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard/notifications')} className="relative">
-            <Bell className="h-5 w-5" />
-            {unreadNotifications > 0 && (
-              <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 text-xs">
-                {unreadNotifications}
-              </Badge>
-            )}
-          </Button>
+          <NotificationBell />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon">
@@ -352,7 +442,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
       {/* Desktop Header */}
       <header className="fixed left-64 right-0 top-0 z-30 hidden h-16 items-center justify-between border-b bg-card px-6 lg:flex">
-        {/* Breadcrumb placeholder */}
+        {/* Breadcrumb */}
         <div className="text-sm text-muted-foreground">
           {location.pathname.split('/').filter(Boolean).map((segment, index, arr) => (
             <span key={segment}>
@@ -366,15 +456,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           <Button variant="ghost" size="icon" onClick={toggleDarkMode}>
             {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </Button>
-          
-          <Button variant="ghost" size="icon" onClick={() => navigate('/dashboard/notifications')} className="relative">
-            <Bell className="h-5 w-5" />
-            {unreadNotifications > 0 && (
-              <Badge className="absolute -right-1 -top-1 h-5 w-5 rounded-full p-0 text-xs">
-                {unreadNotifications}
-              </Badge>
-            )}
-          </Button>
+
+          <NotificationBell />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
