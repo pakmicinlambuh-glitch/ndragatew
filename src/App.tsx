@@ -233,6 +233,40 @@ const App = () => (
               }
             />
 
+            {/* Additional User Routes */}
+            <Route
+              path="/dashboard/withdraw"
+              element={
+                <ProtectedRoute>
+                  <DashboardLayout>
+                    <Withdraw />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Additional Admin Routes */}
+            <Route
+              path="/admin/withdrawals"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <DashboardLayout>
+                    <Withdrawals />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/balance"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <DashboardLayout>
+                    <AdminBalance />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+
             {/* Catch-all */}
             <Route path="*" element={<NotFound />} />
           </Routes>
