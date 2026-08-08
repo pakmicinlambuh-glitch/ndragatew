@@ -1,68 +1,65 @@
+# Upgrade CinGateway: Dukungan Multi Provider
 
-# Implementation: Routes, Sidebar, Notification Bell & Live Chat Upgrade
+## Kondisi saat ini (hasil pemeriksaan)
 
-## 1. Add Missing Routes to App.tsx
+- Seluruh integrasi terkunci ke Sanpay: URL `https://sanpay.site/api/v1/...` ditulis langsung di `create-payment`, `get-channels`, dan `check-transaction`.
+- Kredensial provider disimpan di tabel `api_settings` sebagai **satu baris tunggal** (api_key + merchant_code), jadi tidak mungkin menyimpan lebih dari satu provider.
+- Webhook `sanpay-webhook` mengunci IP `103.127.137.140` dan format payload Sanpay.
+- Tabel `fee_settings` memakai `channel_code` unik global, sehingga channel dari dua provider berbeda akan saling menimpa.
+- Tabel `transactions` tidak punya kolom penanda provider, jadi tidak bisa diketahui transaksi diproses lewat provider mana.
 
-Add three missing routes that were created but never registered:
-- `/dashboard/withdraw` -- Withdraw component
-- `/admin/withdrawals` -- Withdrawals component  
-- `/admin/balance` -- AdminBalance component
+Kesimpulan: sistem perlu lapisan abstraksi provider, bukan sekadar menambah URL baru.
 
-## 2. Update Sidebar Navigation (DashboardLayout.tsx)
+## Yang akan dibangun
 
-### User Menu Updates
-- Add "Penarikan Saldo" menu item pointing to `/dashboard/withdraw` with a Wallet icon
+### 1. Konsep "Server"
+Setiap provider yang diaktifkan admin tampil ke merchant sebagai **Server 1, Server 2, Server 3, ...** (nama internal Sanpay/Tripay/Duitku/Midtrans/Xendit hanya terlihat admin). Merchant memilih server yang dipakai saat membuat transaksi; semua server bisa aktif bersamaan.
 
-### Admin Menu Updates
-- Add "Saldo Admin" pointing to `/admin/balance` with a DollarSign icon
-- Add "Penarikan" pointing to `/admin/withdrawals` with an ArrowDownCircle icon
-- Rename "QRIS Merchant" to "Data QRIS Merchant"
+### 2. Provider yang didukung
+Sanpay (existing), Tripay, Duitku, Midtrans, Xendit, plus tipe **Custom** — admin mengisi base URL, format autentikasi, dan pemetaan field lewat form, tanpa perlu kode baru.
 
-### Also subscribe to UPDATE events on notifications (for accurate unread count when messages are marked read)
+### 3. Panel Admin baru: Kelola Provider
+- Daftar provider: tambah/edit/hapus, aktif/nonaktif, urutan tampil (menentukan nomor Server).
+- Isi kredensial per provider (disimpan aman di backend, tidak pernah dikirim ke browser).
+- Mode sandbox/live per provider.
+- Tombol "Test Koneksi" dan "Sinkron Channel" per provider.
+- Tampilan URL webhook unik per provider untuk dipasang di dashboard provider.
 
-## 3. Notification Bell Popover (DashboardLayout.tsx)
+### 4. Merchant
+- Halaman Buat Transaksi: pilihan Server (hanya server yang diizinkan admin dan mendukung metode yang dipilih), plus opsi "Otomatis" yang memakai server default.
+- Halaman API merchant: parameter opsional `server` pada API publik, didokumentasikan di halaman Documentation.
+- Riwayat transaksi menampilkan server yang dipakai.
 
-Replace the current "navigate to notifications page" bell button with a Popover dropdown:
-- Shows last 5 unread notifications in a dropdown panel
-- Each notification shows title, message preview, and timestamp
-- "Tandai Semua Dibaca" (Mark All Read) button
-- "Lihat Semua" link to `/dashboard/notifications`
-- Red dot indicator when unread count > 0
-- Realtime updates via existing subscription
+### 5. Fee
+Fee dasar mengikuti channel milik masing-masing provider; markup platform tetap dikelola admin per channel. Fee QRIS berjenjang yang sudah ada tetap berlaku.
 
-Uses the already-imported Popover component from `@/components/ui/popover`.
+### 6. Data lama
+Transaksi lama dibiarkan apa adanya tanpa penandaan server; penanda provider hanya berlaku untuk transaksi baru.
 
-## 4. Live Chat Upgrade
+## Detail teknis
 
-### User Chat (src/pages/dashboard/Chat.tsx)
-- Full-height responsive chat interface (calc 100vh minus header)
-- Improved message bubbles with better styling and rounded corners
-- Online status indicator for admin (visual)
-- Enter key to send (already works via form submit)
-- Empty state with a welcoming message and icon
+### Perubahan database
+- `payment_providers` — kode provider, nama internal, label server, tipe adapter, base URL, mode (sandbox/live), aktif, urutan, config JSON (pemetaan field untuk tipe custom).
+- `provider_credentials` — kredensial per provider, hanya dapat dibaca service role (tidak ada akses anon/authenticated).
+- `provider_channels` — channel per provider (unik: provider_id + channel_code), menggantikan peran `fee_settings` sebagai sumber channel; `fee_settings` dipertahankan untuk markup platform.
+- `merchant_provider_access` — server mana yang boleh dipakai tiap merchant + server default.
+- `transactions` — tambah `provider_id`, `provider_reference`, `provider_payload`.
 
-### Admin Live Chat (src/pages/admin/LiveChat.tsx) - Telegram-style
-- Left sidebar: conversation list with search input, unread badges, last message preview, relative timestamps
-- Right panel: full chat window with user info header
-- Mobile responsive: on small screens show list first, clicking opens chat with back button
-- Mark as resolved button per conversation
-- Message read receipts (double check for read, single check for sent)
-- Quick reply suggestions (predefined buttons like "Terima kasih", "Mohon tunggu", etc.)
-- Realtime message sync (already using postgres_changes)
-- Search/filter conversations by email
+Semua tabel baru memakai RLS: merchant hanya membaca data server yang diizinkan, admin penuh, kredensial khusus service role.
 
-## Technical Details
+### Perubahan edge function
+- `_shared/providers/` berisi antarmuka adapter (`createPayment`, `listChannels`, `checkStatus`, `parseWebhook`) dengan implementasi `sanpay`, `tripay`, `duitku`, `midtrans`, `xendit`, `custom`.
+- `user-create-payment`, `create-payment`, `check-transaction`, `get-channels` diubah memanggil adapter sesuai server terpilih, bukan Sanpay langsung.
+- Webhook generik `provider-webhook/:providerCode` yang memvalidasi signature sesuai adapter; `sanpay-webhook` tetap ada agar URL lama tidak putus.
+- Idempotensi webhook: satu referensi provider hanya boleh mengubah status sekali.
 
-### Files Modified
-- `src/App.tsx` -- Add 3 new route definitions
-- `src/components/layout/DashboardLayout.tsx` -- Add sidebar items, notification popover, import Popover
-- `src/pages/dashboard/Chat.tsx` -- Full rewrite with improved UI
-- `src/pages/admin/LiveChat.tsx` -- Full rewrite with Telegram-style interface
+### Kredensial
+Kredensial tiap provider diminta lewat form aman saat provider ditambahkan; tidak ada nilai yang ditulis di kode.
 
-### New Imports Needed
-- `Popover, PopoverTrigger, PopoverContent` from `@/components/ui/popover` in DashboardLayout
-- `ArrowDownCircle, Wallet` icons (already imported in DashboardLayout)
-- `Search, ArrowLeft, CheckCheck, Check` icons for LiveChat
-
-### No Database Changes Required
-All tables (chat_messages, notifications, withdrawal_requests) already exist with proper RLS policies.
+## Urutan pengerjaan
+1. Migrasi database + RLS.
+2. Lapisan adapter + refactor Sanpay ke adapter (fungsionalitas lama tetap jalan).
+3. Adapter Tripay, Duitku, Midtrans, Xendit, Custom.
+4. Webhook generik.
+5. Panel admin Kelola Provider.
+6. Pemilihan Server di sisi merchant + dokumentasi API.
