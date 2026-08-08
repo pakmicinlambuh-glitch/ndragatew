@@ -99,16 +99,21 @@ function calculateTieredFee(amount: number, feeSettings: any): number {
   return Math.ceil(baseFee + markupFee);
 }
 
-// Calculate standard fee for VA/Retail
-function calculateStandardFee(amount: number, feeSettings: any): number {
-  if (!feeSettings) return 0;
-  
+// Calculate standard fee for VA/Retail.
+// Base fee prefers the selected provider's channel, markup always comes from platform settings.
+function calculateStandardFee(amount: number, feeSettings: any, providerChannel?: any): number {
+  if (!feeSettings && !providerChannel) return 0;
+
+  const baseSource = providerChannel ?? feeSettings;
   let baseFee = 0;
-  if (feeSettings.base_fee_type === 'fixed') {
-    baseFee = feeSettings.base_fee_value || 0;
+  if (!baseSource) {
+    baseFee = 0;
+  } else if (baseSource.base_fee_type === 'fixed') {
+    baseFee = baseSource.base_fee_value || 0;
   } else {
-    baseFee = (amount * (feeSettings.base_fee_value || 0)) / 100;
+    baseFee = (amount * (baseSource.base_fee_value || 0)) / 100;
   }
+
   
   let markupFee = 0;
   if (feeSettings.markup_fee_type === 'fixed') {
