@@ -116,11 +116,14 @@ function calculateStandardFee(amount: number, feeSettings: any, providerChannel?
 
   
   let markupFee = 0;
-  if (feeSettings.markup_fee_type === 'fixed') {
-    markupFee = feeSettings.markup_fee_value || 0;
-  } else {
-    markupFee = (amount * (feeSettings.markup_fee_value || 0)) / 100;
+  if (feeSettings) {
+    if (feeSettings.markup_fee_type === 'fixed') {
+      markupFee = feeSettings.markup_fee_value || 0;
+    } else {
+      markupFee = (amount * (feeSettings.markup_fee_value || 0)) / 100;
+    }
   }
+
   
   return Math.ceil(baseFee + markupFee);
 }
