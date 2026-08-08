@@ -286,20 +286,40 @@ serve(async (req) => {
       });
     }
 
-    // Get fee settings
+    // Resolve which provider (server) handles this transaction
+    const requestedServer = (body as any).server ?? (body as any).provider ?? null;
+    const provider = await resolveProvider(supabase, {
+      userId,
+      serverLabel: requestedServer,
+      paymentMethod: paymentType,
+    });
+
+    // Base fee comes from the selected provider's channel when available
+    let providerChannel: any = null;
+    if (provider && channelCode) {
+      const { data } = await supabase
+        .from('provider_channels')
+        .select('*')
+        .eq('provider_id', provider.id)
+        .eq('channel_code', channelCode)
+        .maybeSingle();
+      providerChannel = data;
+    }
+
+    // Get fee settings (platform markup)
     const { data: feeSettings } = await supabase
       .from('fee_settings')
       .select('*')
       .eq('channel_code', channelCode)
       .eq('is_active', true)
-      .single();
+      .maybeSingle();
 
     // Calculate fee based on payment type
     let adminFee: number;
     if (paymentType === 'qris') {
       adminFee = calculateTieredFee(amount, feeSettings);
     } else {
-      adminFee = calculateStandardFee(amount, feeSettings);
+      adminFee = calculateStandardFee(amount, feeSettings, providerChannel);
     }
 
     const totalAmount = amount + adminFee;
@@ -326,7 +346,9 @@ serve(async (req) => {
         payment_url: paymentUrl,
         status: 'pending',
         expires_at: expiresAt,
+        provider_id: provider?.id ?? null,
       })
+
       .select()
       .single();
 
