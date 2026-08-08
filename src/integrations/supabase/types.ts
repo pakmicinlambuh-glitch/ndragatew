@@ -212,6 +212,44 @@ export type Database = {
         }
         Relationships: []
       }
+      merchant_provider_access: {
+        Row: {
+          created_at: string
+          id: string
+          is_allowed: boolean
+          is_default: boolean
+          provider_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_allowed?: boolean
+          is_default?: boolean
+          provider_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_allowed?: boolean
+          is_default?: boolean
+          provider_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_provider_access_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "payment_providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       merchant_qris_requests: {
         Row: {
           business_address: string | null
@@ -290,6 +328,60 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_providers: {
+        Row: {
+          adapter_type: string
+          base_url: string | null
+          code: string
+          config: Json
+          created_at: string
+          id: string
+          is_active: boolean
+          mode: Database["public"]["Enums"]["provider_mode"]
+          name: string
+          server_label: string | null
+          sort_order: number
+          supports_qris: boolean
+          supports_retail: boolean
+          supports_va: boolean
+          updated_at: string
+        }
+        Insert: {
+          adapter_type?: string
+          base_url?: string | null
+          code: string
+          config?: Json
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          mode?: Database["public"]["Enums"]["provider_mode"]
+          name: string
+          server_label?: string | null
+          sort_order?: number
+          supports_qris?: boolean
+          supports_retail?: boolean
+          supports_va?: boolean
+          updated_at?: string
+        }
+        Update: {
+          adapter_type?: string
+          base_url?: string | null
+          code?: string
+          config?: Json
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          mode?: Database["public"]["Enums"]["provider_mode"]
+          name?: string
+          server_label?: string | null
+          sort_order?: number
+          supports_qris?: boolean
+          supports_retail?: boolean
+          supports_va?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -329,6 +421,103 @@ export type Database = {
         }
         Relationships: []
       }
+      provider_channels: {
+        Row: {
+          base_fee_type: Database["public"]["Enums"]["fee_type"]
+          base_fee_value: number
+          channel_code: string
+          channel_name: string
+          channel_type: string
+          created_at: string
+          id: string
+          is_active: boolean
+          max_amount: number
+          min_amount: number
+          provider_id: string
+          updated_at: string
+        }
+        Insert: {
+          base_fee_type?: Database["public"]["Enums"]["fee_type"]
+          base_fee_value?: number
+          channel_code: string
+          channel_name: string
+          channel_type: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          max_amount?: number
+          min_amount?: number
+          provider_id: string
+          updated_at?: string
+        }
+        Update: {
+          base_fee_type?: Database["public"]["Enums"]["fee_type"]
+          base_fee_value?: number
+          channel_code?: string
+          channel_name?: string
+          channel_type?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          max_amount?: number
+          min_amount?: number
+          provider_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_channels_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "payment_providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      provider_credentials: {
+        Row: {
+          api_key: string | null
+          client_id: string | null
+          created_at: string
+          extra: Json
+          id: string
+          merchant_code: string | null
+          private_key: string | null
+          provider_id: string
+          updated_at: string
+        }
+        Insert: {
+          api_key?: string | null
+          client_id?: string | null
+          created_at?: string
+          extra?: Json
+          id?: string
+          merchant_code?: string | null
+          private_key?: string | null
+          provider_id: string
+          updated_at?: string
+        }
+        Update: {
+          api_key?: string | null
+          client_id?: string | null
+          created_at?: string
+          extra?: Json
+          id?: string
+          merchant_code?: string | null
+          private_key?: string | null
+          provider_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "provider_credentials_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: true
+            referencedRelation: "payment_providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           admin_fee: number | null
@@ -347,6 +536,9 @@ export type Database = {
           payment_code: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           payment_url: string | null
+          provider_id: string | null
+          provider_payload: Json | null
+          provider_reference: string | null
           qr_content: string | null
           status: Database["public"]["Enums"]["transaction_status"] | null
           total_amount: number
@@ -371,6 +563,9 @@ export type Database = {
           payment_code?: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           payment_url?: string | null
+          provider_id?: string | null
+          provider_payload?: Json | null
+          provider_reference?: string | null
           qr_content?: string | null
           status?: Database["public"]["Enums"]["transaction_status"] | null
           total_amount: number
@@ -395,6 +590,9 @@ export type Database = {
           payment_code?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           payment_url?: string | null
+          provider_id?: string | null
+          provider_payload?: Json | null
+          provider_reference?: string | null
           qr_content?: string | null
           status?: Database["public"]["Enums"]["transaction_status"] | null
           total_amount?: number
@@ -402,7 +600,15 @@ export type Database = {
           user_id?: string | null
           va_number?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "transactions_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "payment_providers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_api_settings: {
         Row: {
@@ -642,6 +848,7 @@ export type Database = {
       merchant_request_status: "pending" | "approved" | "rejected"
       notification_type: "info" | "warning" | "success" | "error"
       payment_method: "qris" | "va" | "retail"
+      provider_mode: "sandbox" | "live"
       transaction_status: "pending" | "paid" | "expired" | "failed"
       widget_type: "info_box" | "slide" | "banner" | "announcement"
     }
@@ -778,6 +985,7 @@ export const Constants = {
       merchant_request_status: ["pending", "approved", "rejected"],
       notification_type: ["info", "warning", "success", "error"],
       payment_method: ["qris", "va", "retail"],
+      provider_mode: ["sandbox", "live"],
       transaction_status: ["pending", "paid", "expired", "failed"],
       widget_type: ["info_box", "slide", "banner", "announcement"],
     },

@@ -1,5 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getAdapter, resolveProvider } from "../_shared/providers/index.ts";
+
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -97,23 +99,31 @@ function calculateTieredFee(amount: number, feeSettings: any): number {
   return Math.ceil(baseFee + markupFee);
 }
 
-// Calculate standard fee for VA/Retail
-function calculateStandardFee(amount: number, feeSettings: any): number {
-  if (!feeSettings) return 0;
-  
+// Calculate standard fee for VA/Retail.
+// Base fee prefers the selected provider's channel, markup always comes from platform settings.
+function calculateStandardFee(amount: number, feeSettings: any, providerChannel?: any): number {
+  if (!feeSettings && !providerChannel) return 0;
+
+  const baseSource = providerChannel ?? feeSettings;
   let baseFee = 0;
-  if (feeSettings.base_fee_type === 'fixed') {
-    baseFee = feeSettings.base_fee_value || 0;
+  if (!baseSource) {
+    baseFee = 0;
+  } else if (baseSource.base_fee_type === 'fixed') {
+    baseFee = baseSource.base_fee_value || 0;
   } else {
-    baseFee = (amount * (feeSettings.base_fee_value || 0)) / 100;
+    baseFee = (amount * (baseSource.base_fee_value || 0)) / 100;
   }
+
   
   let markupFee = 0;
-  if (feeSettings.markup_fee_type === 'fixed') {
-    markupFee = feeSettings.markup_fee_value || 0;
-  } else {
-    markupFee = (amount * (feeSettings.markup_fee_value || 0)) / 100;
+  if (feeSettings) {
+    if (feeSettings.markup_fee_type === 'fixed') {
+      markupFee = feeSettings.markup_fee_value || 0;
+    } else {
+      markupFee = (amount * (feeSettings.markup_fee_value || 0)) / 100;
+    }
   }
+
   
   return Math.ceil(baseFee + markupFee);
 }
@@ -286,20 +296,40 @@ serve(async (req) => {
       });
     }
 
-    // Get fee settings
+    // Resolve which provider (server) handles this transaction
+    const requestedServer = (body as any).server ?? (body as any).provider ?? null;
+    const provider = await resolveProvider(supabase, {
+      userId,
+      serverLabel: requestedServer,
+      paymentMethod: paymentType,
+    });
+
+    // Base fee comes from the selected provider's channel when available
+    let providerChannel: any = null;
+    if (provider && channelCode) {
+      const { data } = await supabase
+        .from('provider_channels')
+        .select('*')
+        .eq('provider_id', provider.id)
+        .eq('channel_code', channelCode)
+        .maybeSingle();
+      providerChannel = data;
+    }
+
+    // Get fee settings (platform markup)
     const { data: feeSettings } = await supabase
       .from('fee_settings')
       .select('*')
       .eq('channel_code', channelCode)
       .eq('is_active', true)
-      .single();
+      .maybeSingle();
 
     // Calculate fee based on payment type
     let adminFee: number;
     if (paymentType === 'qris') {
       adminFee = calculateTieredFee(amount, feeSettings);
     } else {
-      adminFee = calculateStandardFee(amount, feeSettings);
+      adminFee = calculateStandardFee(amount, feeSettings, providerChannel);
     }
 
     const totalAmount = amount + adminFee;
@@ -326,7 +356,9 @@ serve(async (req) => {
         payment_url: paymentUrl,
         status: 'pending',
         expires_at: expiresAt,
+        provider_id: provider?.id ?? null,
       })
+
       .select()
       .single();
 
@@ -341,101 +373,61 @@ serve(async (req) => {
       });
     }
 
-    // Get admin API settings for sanpay
-    const { data: apiConfig } = await supabase
-      .from('api_settings')
-      .select('*')
-      .limit(1)
-      .single();
-
     // Format expires date
     const expiresDate = new Date(expiresAt);
     const formattedExpiresAt = expiresDate.toISOString().replace('T', ' ').substring(0, 19);
     const isoExpiresAt = expiresDate.toISOString().replace('Z', '+07:00');
 
-    // Call sanpay API if configured, otherwise demo mode
+    // Call the selected provider (server) through its adapter
     let paymentDetails: any = {};
-    
-    if (apiConfig?.api_key && apiConfig?.merchant_code) {
+
+    if (provider) {
       try {
-        let endpoint = '';
-        let requestBody: any = {};
-
-        if (paymentType === 'qris') {
-          endpoint = 'https://sanpay.site/api/v1/topup_qris';
-          
-          // Generate signature for sanpay
-          const sanpayPayload = JSON.stringify({
-            amount: amount,
-            partnerReferenceNo: referenceNo,
-            expirySeconds: expirySeconds
-          });
-          const sanpaySignature = await generateSignature(sanpayPayload, apiConfig.api_key);
-          
-          requestBody = {
-            amount: amount,
-            partnerReferenceNo: referenceNo,
-            expirySeconds: expirySeconds
-          };
-          
-        } else if (paymentType === 'va') {
-          endpoint = 'https://sanpay.site/api/v1/topup_va';
-          requestBody = {
-            amount: amount,
-            partnerReferenceNo: referenceNo,
-            bank_code: channelCode,
-            name: customerName
-          };
-        } else if (paymentType === 'retail') {
-          endpoint = 'https://sanpay.site/api/v1/topup_retail';
-          requestBody = {
-            amount: amount,
-            partnerReferenceNo: referenceNo,
-            retail_outlet: channelCode,
-            name: customerName
-          };
-        }
-
-        // Generate signature for sanpay request
-        const sanpayPayloadStr = JSON.stringify(requestBody);
-        const sanpaySignature = await generateSignature(sanpayPayloadStr, apiConfig.api_key);
-
-        const response = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 
-            'Content-Type': 'application/json',
-            'X-Merchant-Code': apiConfig.merchant_code,
-            'X-Signature': sanpaySignature
-          },
-          body: sanpayPayloadStr,
+        const adapter = getAdapter(provider.adapter_type);
+        const result = await adapter.createPayment(provider, {
+          amount,
+          totalAmount,
+          paymentMethod: paymentType,
+          channelCode,
+          referenceNo,
+          customerName,
+          customerEmail,
+          customerPhone,
+          expirySeconds,
+          callbackUrl: `${Deno.env.get('SUPABASE_URL')}/functions/v1/provider-webhook?provider=${provider.code}`,
+          returnUrl: paymentUrl,
         });
 
-        const result = await response.json();
-        console.log('Sanpay response:', result);
+        console.log(`Provider ${provider.code} response:`, JSON.stringify(result).substring(0, 500));
 
-        if (result.status === 'success') {
-          paymentDetails = result;
-          
-          // Update transaction with payment details
-          const updateData: any = {};
+        if (result.success) {
+          paymentDetails = {
+            status: 'success',
+            qrContent: result.qrContent,
+            va_number: result.vaNumber,
+            payment_code: result.paymentCode,
+          };
+
+          const updateData: any = { provider_payload: result.raw ?? null };
           if (result.qrContent) updateData.qr_content = result.qrContent;
-          if (result.va_number) updateData.va_number = result.va_number;
-          if (result.payment_code) updateData.payment_code = result.payment_code;
-          if (result.external_id) updateData.external_id = result.external_id;
-
-          if (Object.keys(updateData).length > 0) {
-            await supabase
-              .from('transactions')
-              .update(updateData)
-              .eq('id', transaction.id);
+          if (result.vaNumber) updateData.va_number = result.vaNumber;
+          if (result.paymentCode) updateData.payment_code = result.paymentCode;
+          if (result.providerReference) {
+            updateData.provider_reference = result.providerReference;
+            updateData.external_id = result.providerReference;
           }
+          if (result.expiresAt) updateData.expires_at = result.expiresAt;
+
+          await supabase.from('transactions').update(updateData).eq('id', transaction.id);
+        } else {
+          console.error('Provider error:', result.error);
         }
       } catch (e) {
-        console.error('Sanpay API error:', e);
+        console.error('Provider API error:', e);
       }
     }
-    
-    // Demo mode - generate fake data if no sanpay response
+
+    // Demo mode - generate placeholder data when no provider is configured
     if (!paymentDetails.status) {
       if (paymentType === 'qris') {
         const demoQr = `00020101021226860014ID.CO.CINGATEWAY0215${Date.now()}52040000530336054${amount.toString().padStart(10, '0')}5802ID5913CinGateway6015Jakarta Pusat61051034062${referenceNo}6304`;
@@ -469,6 +461,7 @@ serve(async (req) => {
         };
       }
     }
+
 
     // Build response based on payment type (sanpay.site compatible format)
     let responseData: any;

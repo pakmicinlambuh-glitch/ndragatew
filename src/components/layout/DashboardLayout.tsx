@@ -197,7 +197,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
     { title: 'Saldo Admin', href: '/admin/balance', icon: <DollarSign className="h-5 w-5" /> },
     { title: 'Penarikan', href: '/admin/withdrawals', icon: <ArrowDownCircle className="h-5 w-5" /> },
     { title: 'Pengaturan Fee', href: '/admin/fees', icon: <DollarSign className="h-5 w-5" /> },
+    { title: 'Provider Pembayaran', href: '/admin/providers', icon: <Settings className="h-5 w-5" /> },
     { title: 'Pengaturan API', href: '/admin/settings', icon: <Settings className="h-5 w-5" /> },
+
     { title: 'Laporan', href: '/admin/reports', icon: <FileText className="h-5 w-5" /> },
     { title: 'Live Chat', href: '/admin/chat', icon: <MessageCircle className="h-5 w-5" />, badge: unreadChats },
     { title: 'Dashboard Widgets', href: '/admin/widgets', icon: <LayoutGrid className="h-5 w-5" /> },
