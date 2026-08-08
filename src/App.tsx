@@ -31,6 +31,8 @@ import DashboardWidgets from "./pages/admin/DashboardWidgets";
 import MerchantQrisRequests from "./pages/admin/MerchantQrisRequests";
 import Withdrawals from "./pages/admin/Withdrawals";
 import AdminBalance from "./pages/admin/AdminBalance";
+import PaymentProviders from "./pages/admin/PaymentProviders";
+
 import Checkout from "./pages/Checkout";
 import NotFound from "./pages/NotFound";
 
@@ -192,6 +194,17 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/admin/providers"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <DashboardLayout>
+                    <PaymentProviders />
+                  </DashboardLayout>
+                </ProtectedRoute>
+              }
+            />
+
             <Route
               path="/admin/reports"
               element={
