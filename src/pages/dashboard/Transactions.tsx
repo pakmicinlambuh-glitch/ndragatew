@@ -211,8 +211,22 @@ export default function Transactions() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Riwayat Transaksi</h1>
-        <p className="text-muted-foreground">Daftar semua transaksi Anda</p>
+        <p className="text-muted-foreground">
+          Daftar transaksi Anda pada mode {isSandbox ? 'Sandbox (testing)' : 'Production (asli)'}
+        </p>
       </div>
+
+      {isSandbox && (
+        <div className="flex items-center gap-3 rounded-lg border border-warning/40 bg-warning/10 p-4">
+          <FlaskConical className="h-5 w-5 text-warning" />
+          <p className="text-sm">
+            Anda berada di <strong>mode Sandbox</strong>. Transaksi di sini tidak nyata, tidak memanggil
+            provider, dan saldo sandbox terpisah dari saldo asli. Gunakan tombol simulasi untuk menandai
+            pembayaran dan menguji webhook serta realtime.
+          </p>
+        </div>
+      )}
+
 
       <Card>
         <CardHeader>
