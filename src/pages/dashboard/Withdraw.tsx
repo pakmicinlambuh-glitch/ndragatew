@@ -60,7 +60,7 @@ export default function Withdraw() {
   const fetchData = async () => {
     try {
       const [balanceRes, withdrawalsRes] = await Promise.all([
-        supabase.from('user_balance').select('balance').eq('user_id', user!.id).maybeSingle(),
+        supabase.from('user_balance').select('balance').eq('user_id', user!.id).eq('mode', 'live').maybeSingle(),
         supabase.from('withdrawal_requests').select('*').eq('user_id', user!.id).order('created_at', { ascending: false }),
       ]);
       setBalance(balanceRes.data?.balance || 0);
