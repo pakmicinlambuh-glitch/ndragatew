@@ -416,7 +416,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          <EnvModeSwitch compact />
           <NotificationBell />
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon">
