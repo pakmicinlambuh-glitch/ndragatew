@@ -37,7 +37,7 @@ export default function AdminBalance() {
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
       const [balances, transactions, profiles, kycs, withdrawals, monthlyTxs] = await Promise.all([
-        supabase.from('user_balance').select('balance'),
+        supabase.from('user_balance').select('balance').eq('mode', 'live'),
         supabase.from('transactions').select('amount, admin_fee, status'),
         supabase.from('profiles').select('id', { count: 'exact', head: true }),
         supabase.from('user_kyc').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
