@@ -511,7 +511,13 @@ serve(async (req) => {
       };
     }
 
+    responseData.mode = mode;
+    if (mode === 'sandbox') {
+      responseData.simulateUrl = `${Deno.env.get('SUPABASE_URL')}/functions/v1/sandbox-simulate`;
+    }
+
     return new Response(JSON.stringify(responseData), {
+
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
