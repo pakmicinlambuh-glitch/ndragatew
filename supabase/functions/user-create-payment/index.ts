@@ -440,7 +440,7 @@ serve(async (req) => {
       }
     }
 
-    // Demo mode - generate placeholder data when no provider is configured
+    // Sandbox / demo mode - simulated instruments (no provider call)
     if (!paymentDetails.status) {
       if (paymentType === 'qris') {
         const demoQr = `00020101021226860014ID.CO.CINGATEWAY0215${Date.now()}52040000530336054${amount.toString().padStart(10, '0')}5802ID5913CinGateway6015Jakarta Pusat61051034062${referenceNo}6304`;
