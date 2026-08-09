@@ -265,7 +265,9 @@ export default function UserManagement() {
         _type: balanceType,
         _description: balanceDescription || `${balanceType === 'credit' ? 'Penambahan' : 'Pengurangan'} saldo oleh admin`,
         _created_by: currentUser?.id,
+        _mode: 'live',
       });
+
 
       if (error) throw error;
 
