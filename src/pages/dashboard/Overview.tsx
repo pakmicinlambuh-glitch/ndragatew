@@ -126,8 +126,10 @@ export default function Overview() {
       let recentQuery = supabase
         .from('transactions')
         .select('*')
+        .eq('mode', mode)
         .order('created_at', { ascending: false })
         .limit(5);
+
 
       if (!isAdmin) {
         recentQuery = recentQuery.eq('user_id', user?.id);
