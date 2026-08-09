@@ -27,10 +27,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Loader2, Search, Eye, CreditCard, Copy, CheckCircle, ExternalLink, Link2 } from 'lucide-react';
+import { Loader2, Search, Eye, CreditCard, Copy, CheckCircle, ExternalLink, Link2, FlaskConical, PlayCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
+import { useEnvMode } from '@/hooks/useEnvMode';
 
 interface Transaction {
   id: string;
