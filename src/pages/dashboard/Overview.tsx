@@ -60,6 +60,7 @@ interface Stats {
 
 export default function Overview() {
   const { user, isAdmin } = useAuth();
+  const { mode } = useEnvMode();
   const [stats, setStats] = useState<Stats>({
     totalTransactions: 0,
     userBalance: 0,
