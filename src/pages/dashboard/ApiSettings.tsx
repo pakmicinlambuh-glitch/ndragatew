@@ -14,6 +14,7 @@ interface UserApiSettings {
   id: string;
   user_id: string;
   api_key: string;
+  sandbox_api_key: string | null;
   webhook_url: string | null;
   webhook_secret: string;
   is_active: boolean;
