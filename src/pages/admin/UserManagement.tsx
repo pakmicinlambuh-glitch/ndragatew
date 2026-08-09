@@ -127,7 +127,8 @@ export default function UserManagement() {
       // Fetch balances
       const { data: balances, error: balancesError } = await supabase
         .from('user_balance')
-        .select('user_id, balance');
+        .select('user_id, balance')
+        .eq('mode', 'live');
 
       // Fetch KYC status
       const { data: kycs, error: kycsError } = await supabase
