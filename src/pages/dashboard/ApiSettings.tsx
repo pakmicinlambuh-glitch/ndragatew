@@ -61,18 +61,20 @@ export default function UserApiSettings() {
     finally { setSaving(false); }
   };
 
-  const handleRegenerateApiKey = async () => {
+  const handleRegenerateApiKey = async (env: 'live' | 'sandbox' = 'live') => {
     if (!settings) return;
     setRegenerating(true);
     try {
       const newApiKey = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, '0')).join('');
-      const { error } = await supabase.from('user_api_settings').update({ api_key: newApiKey }).eq('id', settings.id);
+      const payload = env === 'sandbox' ? { sandbox_api_key: `sb_${newApiKey}` } : { api_key: newApiKey };
+      const { error } = await supabase.from('user_api_settings').update(payload).eq('id', settings.id);
       if (error) throw error;
-      toast({ title: 'API Key Diperbarui', description: 'Pastikan update di integrasi Anda.' });
+      toast({ title: env === 'sandbox' ? 'Sandbox Key Diperbarui' : 'API Key Diperbarui', description: 'Pastikan update di integrasi Anda.' });
       fetchSettings();
     } catch (error: any) { toast({ title: 'Gagal', description: error.message, variant: 'destructive' }); }
     finally { setRegenerating(false); }
   };
+
 
   const copyToClipboard = (text: string, label: string) => { navigator.clipboard.writeText(text); toast({ title: 'Disalin!', description: `${label} berhasil disalin` }); };
 
