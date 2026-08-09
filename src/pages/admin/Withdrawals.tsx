@@ -93,6 +93,7 @@ export default function Withdrawals() {
           _type: 'debit',
           _description: `Penarikan via ${selected.bank_name || selected.withdrawal_type} - ${selected.account_number}`,
           _created_by: user?.id,
+          _mode: 'live',
         });
         if (balError) throw balError;
       }
