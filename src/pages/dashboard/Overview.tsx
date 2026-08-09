@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import StatsCard from '@/components/dashboard/StatsCard';
+import RealtimeStatusPanel from '@/components/dashboard/RealtimeStatusPanel';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -207,7 +208,10 @@ export default function Overview() {
         </p>
       </div>
 
+      <RealtimeStatusPanel userId={user?.id} />
+
       {/* Widgets */}
+
       {widgets.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {widgets.slice(0, 3).map((widget) => (
