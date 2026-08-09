@@ -50,6 +50,7 @@ import {
   CheckCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import EnvModeSwitch from '@/components/layout/EnvModeSwitch';
 import { format } from 'date-fns';
 
 interface NavItem {
