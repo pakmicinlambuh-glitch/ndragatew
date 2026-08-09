@@ -27,10 +27,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Loader2, Search, Eye, CreditCard, Copy, CheckCircle, ExternalLink, Link2 } from 'lucide-react';
+import { Loader2, Search, Eye, CreditCard, Copy, CheckCircle, ExternalLink, Link2, FlaskConical, PlayCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { id as localeId } from 'date-fns/locale';
 import { useToast } from '@/hooks/use-toast';
+import { useEnvMode } from '@/hooks/useEnvMode';
 
 interface Transaction {
   id: string;
@@ -57,44 +58,46 @@ interface Transaction {
 export default function Transactions() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { mode, isSandbox } = useEnvMode();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [copied, setCopied] = useState(false);
+  const [simulatingRef, setSimulatingRef] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user) {
-      fetchTransactions();
-      
-      const channel = supabase
-        .channel('user-transactions')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'transactions',
-            filter: `user_id=eq.${user.id}`,
-          },
-          (payload) => {
-            if (payload.eventType === 'INSERT') {
-              setTransactions(prev => [payload.new as Transaction, ...prev]);
-            } else if (payload.eventType === 'UPDATE') {
-              setTransactions(prev =>
-                prev.map(t => (t.id === payload.new.id ? payload.new as Transaction : t))
-              );
-            }
-          }
-        )
-        .subscribe();
+    if (!user) return;
+    fetchTransactions();
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [user]);
+    const channel = supabase
+      .channel(`user-transactions-${user.id}-${mode}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'transactions',
+          filter: `user_id=eq.${user.id}`,
+        },
+        (payload) => {
+          const row = payload.new as Transaction & { mode?: string };
+          if (row?.mode && row.mode !== mode) return;
+          if (payload.eventType === 'INSERT') {
+            setTransactions((prev) => [row, ...prev]);
+          } else if (payload.eventType === 'UPDATE') {
+            setTransactions((prev) => prev.map((t) => (t.id === row.id ? row : t)));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, mode]);
 
   const fetchTransactions = async () => {
     try {
@@ -102,6 +105,7 @@ export default function Transactions() {
         .from('transactions')
         .select('*')
         .eq('user_id', user?.id)
+        .eq('mode', mode)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -112,6 +116,27 @@ export default function Transactions() {
       setLoading(false);
     }
   };
+
+  const simulatePayment = async (tx: Transaction, status: 'paid' | 'expired' | 'failed' = 'paid') => {
+    setSimulatingRef(tx.partner_reference_no);
+    try {
+      const { data, error } = await supabase.functions.invoke('sandbox-simulate', {
+        body: { reference: tx.partner_reference_no, status },
+      });
+      if (error) throw error;
+      if ((data as any)?.status === 'error') throw new Error((data as any).message);
+      toast({
+        title: 'Simulasi berhasil',
+        description: `Transaksi sandbox ditandai ${status}.`,
+      });
+      fetchTransactions();
+    } catch (e: any) {
+      toast({ title: 'Simulasi gagal', description: e.message, variant: 'destructive' });
+    } finally {
+      setSimulatingRef(null);
+    }
+  };
+
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('id-ID', {
@@ -186,8 +211,22 @@ export default function Transactions() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Riwayat Transaksi</h1>
-        <p className="text-muted-foreground">Daftar semua transaksi Anda</p>
+        <p className="text-muted-foreground">
+          Daftar transaksi Anda pada mode {isSandbox ? 'Sandbox (testing)' : 'Production (asli)'}
+        </p>
       </div>
+
+      {isSandbox && (
+        <div className="flex items-center gap-3 rounded-lg border border-warning/40 bg-warning/10 p-4">
+          <FlaskConical className="h-5 w-5 text-warning" />
+          <p className="text-sm">
+            Anda berada di <strong>mode Sandbox</strong>. Transaksi di sini tidak nyata, tidak memanggil
+            provider, dan saldo sandbox terpisah dari saldo asli. Gunakan tombol simulasi untuk menandai
+            pembayaran dan menguji webhook serta realtime.
+          </p>
+        </div>
+      )}
+
 
       <Card>
         <CardHeader>
@@ -287,8 +326,24 @@ export default function Transactions() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {isSandbox && tx.status === 'pending' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Simulasikan pembayaran (sandbox)"
+                              disabled={simulatingRef === tx.partner_reference_no}
+                              onClick={() => simulatePayment(tx, 'paid')}
+                            >
+                              {simulatingRef === tx.partner_reference_no ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <PlayCircle className="h-4 w-4 text-success" />
+                              )}
+                            </Button>
+                          )}
                           {tx.status === 'pending' && (
                             <>
+
                               <Button
                                 variant="ghost"
                                 size="icon"

@@ -127,7 +127,8 @@ export default function UserManagement() {
       // Fetch balances
       const { data: balances, error: balancesError } = await supabase
         .from('user_balance')
-        .select('user_id, balance');
+        .select('user_id, balance')
+        .eq('mode', 'live');
 
       // Fetch KYC status
       const { data: kycs, error: kycsError } = await supabase
@@ -265,7 +266,9 @@ export default function UserManagement() {
         _type: balanceType,
         _description: balanceDescription || `${balanceType === 'credit' ? 'Penambahan' : 'Pengurangan'} saldo oleh admin`,
         _created_by: currentUser?.id,
+        _mode: 'live',
       });
+
 
       if (error) throw error;
 

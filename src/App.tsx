@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
+import { EnvModeProvider } from "@/hooks/useEnvMode";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 
@@ -45,7 +46,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <EnvModeProvider>
           <Routes>
+
             {/* Public Routes */}
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
@@ -283,7 +286,9 @@ const App = () => (
             {/* Catch-all */}
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </EnvModeProvider>
         </AuthProvider>
+
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

@@ -14,6 +14,7 @@ interface UserApiSettings {
   id: string;
   user_id: string;
   api_key: string;
+  sandbox_api_key: string | null;
   webhook_url: string | null;
   webhook_secret: string;
   is_active: boolean;
@@ -28,6 +29,7 @@ export default function UserApiSettings() {
   const [settings, setSettings] = useState<UserApiSettings | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
+  const [showSandboxKey, setShowSandboxKey] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState('');
 
   useEffect(() => { fetchSettings(); }, [user]);
@@ -59,18 +61,20 @@ export default function UserApiSettings() {
     finally { setSaving(false); }
   };
 
-  const handleRegenerateApiKey = async () => {
+  const handleRegenerateApiKey = async (env: 'live' | 'sandbox' = 'live') => {
     if (!settings) return;
     setRegenerating(true);
     try {
       const newApiKey = Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, '0')).join('');
-      const { error } = await supabase.from('user_api_settings').update({ api_key: newApiKey }).eq('id', settings.id);
+      const payload = env === 'sandbox' ? { sandbox_api_key: `sb_${newApiKey}` } : { api_key: newApiKey };
+      const { error } = await supabase.from('user_api_settings').update(payload).eq('id', settings.id);
       if (error) throw error;
-      toast({ title: 'API Key Diperbarui', description: 'Pastikan update di integrasi Anda.' });
+      toast({ title: env === 'sandbox' ? 'Sandbox Key Diperbarui' : 'API Key Diperbarui', description: 'Pastikan update di integrasi Anda.' });
       fetchSettings();
     } catch (error: any) { toast({ title: 'Gagal', description: error.message, variant: 'destructive' }); }
     finally { setRegenerating(false); }
   };
+
 
   const copyToClipboard = (text: string, label: string) => { navigator.clipboard.writeText(text); toast({ title: 'Disalin!', description: `${label} berhasil disalin` }); };
 
@@ -101,7 +105,7 @@ export default function UserApiSettings() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>API Key</Label>
+                <Label>API Key Production (Live)</Label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
                     <Input type={showApiKey ? 'text' : 'password'} value={settings?.api_key || ''} readOnly className="pr-20 font-mono text-sm" />
@@ -111,11 +115,35 @@ export default function UserApiSettings() {
                   </div>
                   <Button variant="outline" onClick={() => copyToClipboard(settings?.api_key || '', 'API Key')}><Copy className="h-4 w-4" /></Button>
                 </div>
+                <Button variant="outline" size="sm" onClick={() => handleRegenerateApiKey('live')} disabled={regenerating}>
+                  {regenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                  Regenerate API Key Live
+                </Button>
               </div>
-              <Button variant="outline" onClick={handleRegenerateApiKey} disabled={regenerating}>
-                {regenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                Regenerate API Key
-              </Button>
+
+              <div className="space-y-2 rounded-lg border border-dashed p-4">
+                <div className="flex items-center gap-2">
+                  <Label>API Key Sandbox (Testing)</Label>
+                  <Badge variant="secondary">Sandbox</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Gunakan key ini untuk menguji integrasi. Transaksi sandbox tidak memanggil provider asli dan saldonya terpisah.
+                </p>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input type={showSandboxKey ? 'text' : 'password'} value={settings?.sandbox_api_key || ''} readOnly className="pr-20 font-mono text-sm" />
+                    <Button type="button" variant="ghost" size="sm" className="absolute right-1 top-1/2 -translate-y-1/2" onClick={() => setShowSandboxKey(!showSandboxKey)}>
+                      {showSandboxKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                  <Button variant="outline" onClick={() => copyToClipboard(settings?.sandbox_api_key || '', 'Sandbox API Key')}><Copy className="h-4 w-4" /></Button>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => handleRegenerateApiKey('sandbox')} disabled={regenerating}>
+                  {regenerating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                  Regenerate API Key Sandbox
+                </Button>
+              </div>
+
               <div className="rounded-lg border border-warning/50 bg-warning/10 p-4">
                 <div className="flex items-center gap-2 mb-2"><Shield className="h-4 w-4 text-warning" /><p className="font-semibold text-sm text-warning">Keamanan</p></div>
                 <p className="text-sm text-muted-foreground">Jangan bagikan API key Anda. Simpan di server-side dan jangan expose di client-side code.</p>

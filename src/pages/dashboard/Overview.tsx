@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useEnvMode } from '@/hooks/useEnvMode';
 import { supabase } from '@/integrations/supabase/client';
 import StatsCard from '@/components/dashboard/StatsCard';
 import RealtimeStatusPanel from '@/components/dashboard/RealtimeStatusPanel';
@@ -60,6 +61,7 @@ interface Stats {
 
 export default function Overview() {
   const { user, isAdmin } = useAuth();
+  const { mode } = useEnvMode();
   const [stats, setStats] = useState<Stats>({
     totalTransactions: 0,
     userBalance: 0,
@@ -87,19 +89,20 @@ export default function Overview() {
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isAdmin]);
+  }, [user, isAdmin, mode]);
 
 
   const fetchData = async () => {
     try {
       // Fetch stats
-      let query = supabase.from('transactions').select('*');
+      let query = supabase.from('transactions').select('*').eq('mode', mode);
       
       if (!isAdmin) {
         query = query.eq('user_id', user?.id);
       }
 
       const { data: transactions, error } = await query;
+
 
       if (error) throw error;
 
@@ -123,8 +126,10 @@ export default function Overview() {
       let recentQuery = supabase
         .from('transactions')
         .select('*')
+        .eq('mode', mode)
         .order('created_at', { ascending: false })
         .limit(5);
+
 
       if (!isAdmin) {
         recentQuery = recentQuery.eq('user_id', user?.id);

@@ -50,6 +50,7 @@ import {
   CheckCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import EnvModeSwitch from '@/components/layout/EnvModeSwitch';
 import { format } from 'date-fns';
 
 interface NavItem {
@@ -415,7 +416,9 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
 
         <div className="flex items-center gap-2">
+          <EnvModeSwitch compact />
           <NotificationBell />
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon">
@@ -455,7 +458,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
 
         <div className="flex items-center gap-4">
+          <EnvModeSwitch />
+
           <Button variant="ghost" size="icon" onClick={toggleDarkMode}>
+
             {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </Button>
 
