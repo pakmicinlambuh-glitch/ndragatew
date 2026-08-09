@@ -51,6 +51,7 @@ export type Database = {
           created_by: string | null
           description: string | null
           id: string
+          mode: Database["public"]["Enums"]["app_env"]
           reference_id: string | null
           type: string
           user_id: string
@@ -61,6 +62,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          mode?: Database["public"]["Enums"]["app_env"]
           reference_id?: string | null
           type: string
           user_id: string
@@ -71,6 +73,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           id?: string
+          mode?: Database["public"]["Enums"]["app_env"]
           reference_id?: string | null
           type?: string
           user_id?: string
@@ -531,6 +534,7 @@ export type Database = {
           expires_at: string | null
           external_id: string | null
           id: string
+          mode: Database["public"]["Enums"]["app_env"]
           paid_at: string | null
           partner_reference_no: string
           payment_code: string | null
@@ -558,6 +562,7 @@ export type Database = {
           expires_at?: string | null
           external_id?: string | null
           id?: string
+          mode?: Database["public"]["Enums"]["app_env"]
           paid_at?: string | null
           partner_reference_no: string
           payment_code?: string | null
@@ -585,6 +590,7 @@ export type Database = {
           expires_at?: string | null
           external_id?: string | null
           id?: string
+          mode?: Database["public"]["Enums"]["app_env"]
           paid_at?: string | null
           partner_reference_no?: string
           payment_code?: string | null
@@ -612,30 +618,36 @@ export type Database = {
       }
       user_api_settings: {
         Row: {
+          active_mode: Database["public"]["Enums"]["app_env"]
           api_key: string
           created_at: string | null
           id: string
           is_active: boolean | null
+          sandbox_api_key: string | null
           updated_at: string | null
           user_id: string
           webhook_secret: string | null
           webhook_url: string | null
         }
         Insert: {
+          active_mode?: Database["public"]["Enums"]["app_env"]
           api_key?: string
           created_at?: string | null
           id?: string
           is_active?: boolean | null
+          sandbox_api_key?: string | null
           updated_at?: string | null
           user_id: string
           webhook_secret?: string | null
           webhook_url?: string | null
         }
         Update: {
+          active_mode?: Database["public"]["Enums"]["app_env"]
           api_key?: string
           created_at?: string | null
           id?: string
           is_active?: boolean | null
+          sandbox_api_key?: string | null
           updated_at?: string | null
           user_id?: string
           webhook_secret?: string | null
@@ -648,6 +660,7 @@ export type Database = {
           balance: number
           created_at: string | null
           id: string
+          mode: Database["public"]["Enums"]["app_env"]
           updated_at: string | null
           user_id: string
         }
@@ -655,6 +668,7 @@ export type Database = {
           balance?: number
           created_at?: string | null
           id?: string
+          mode?: Database["public"]["Enums"]["app_env"]
           updated_at?: string | null
           user_id: string
         }
@@ -662,6 +676,7 @@ export type Database = {
           balance?: number
           created_at?: string | null
           id?: string
+          mode?: Database["public"]["Enums"]["app_env"]
           updated_at?: string | null
           user_id?: string
         }
@@ -821,6 +836,7 @@ export type Database = {
           _amount: number
           _created_by?: string
           _description?: string
+          _mode?: Database["public"]["Enums"]["app_env"]
           _reference_id?: string
           _type: string
           _user_id: string
@@ -841,6 +857,7 @@ export type Database = {
       is_user_suspended: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
+      app_env: "sandbox" | "live"
       app_role: "admin" | "user"
       chat_message_type: "text" | "image" | "file"
       fee_type: "fixed" | "percent"
@@ -978,6 +995,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_env: ["sandbox", "live"],
       app_role: ["admin", "user"],
       chat_message_type: ["text", "image", "file"],
       fee_type: ["fixed", "percent"],
