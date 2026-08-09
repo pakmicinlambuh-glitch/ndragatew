@@ -312,8 +312,24 @@ export default function Transactions() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {isSandbox && tx.status === 'pending' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Simulasikan pembayaran (sandbox)"
+                              disabled={simulatingRef === tx.partner_reference_no}
+                              onClick={() => simulatePayment(tx, 'paid')}
+                            >
+                              {simulatingRef === tx.partner_reference_no ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <PlayCircle className="h-4 w-4 text-success" />
+                              )}
+                            </Button>
+                          )}
                           {tx.status === 'pending' && (
                             <>
+
                               <Button
                                 variant="ghost"
                                 size="icon"
