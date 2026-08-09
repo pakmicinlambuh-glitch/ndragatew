@@ -392,7 +392,9 @@ serve(async (req) => {
     // Call the selected provider (server) through its adapter
     let paymentDetails: any = {};
 
-    if (provider) {
+    // Sandbox never touches a real provider — instruments are simulated below
+    if (provider && mode === 'live') {
+
       try {
         const adapter = getAdapter(provider.adapter_type);
         const result = await adapter.createPayment(provider, {
