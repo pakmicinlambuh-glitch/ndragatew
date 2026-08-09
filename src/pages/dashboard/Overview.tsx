@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useEnvMode } from '@/hooks/useEnvMode';
 import { supabase } from '@/integrations/supabase/client';
 import StatsCard from '@/components/dashboard/StatsCard';
 import RealtimeStatusPanel from '@/components/dashboard/RealtimeStatusPanel';
