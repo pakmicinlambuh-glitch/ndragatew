@@ -365,7 +365,9 @@ serve(async (req) => {
         payment_url: paymentUrl,
         status: 'pending',
         expires_at: expiresAt,
-        provider_id: provider?.id ?? null,
+        provider_id: mode === 'sandbox' ? null : (provider?.id ?? null),
+        mode,
+
       })
 
       .select()
