@@ -89,7 +89,7 @@ export default function Overview() {
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, isAdmin]);
+  }, [user, isAdmin, mode]);
 
 
   const fetchData = async () => {
