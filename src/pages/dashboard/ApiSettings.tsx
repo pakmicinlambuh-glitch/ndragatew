@@ -29,6 +29,7 @@ export default function UserApiSettings() {
   const [settings, setSettings] = useState<UserApiSettings | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
+  const [showSandboxKey, setShowSandboxKey] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState('');
 
   useEffect(() => { fetchSettings(); }, [user]);
