@@ -455,7 +455,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         </div>
 
         <div className="flex items-center gap-4">
+          <EnvModeSwitch />
+
           <Button variant="ghost" size="icon" onClick={toggleDarkMode}>
+
             {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </Button>
 
