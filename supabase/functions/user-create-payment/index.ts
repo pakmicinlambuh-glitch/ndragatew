@@ -165,6 +165,7 @@ serve(async (req) => {
     let merchantName = 'CinGateway Merchant';
     let webhookUrl: string | null = null;
     let webhookSecret: string | null = null;
+    let mode: 'sandbox' | 'live' = 'live';
 
     if (merchantCode && signature) {
       // SNAP BI style authentication with signature
@@ -189,13 +190,17 @@ serve(async (req) => {
       let validSettings = null;
       for (const settings of apiSettings) {
         const expectedMerchantCode = `MC-${settings.api_key.substring(0, 8).toUpperCase()}`;
-        
-        if (merchantCode === expectedMerchantCode) {
+        const expectedSandboxCode = settings.sandbox_api_key
+          ? `MC-${settings.sandbox_api_key.substring(0, 8).toUpperCase()}`
+          : null;
+
+        if (merchantCode === expectedMerchantCode || merchantCode === expectedSandboxCode) {
           const secret = settings.webhook_secret || settings.api_key;
           const isValid = await validateSignature(rawBody, signature, secret);
           
           if (isValid) {
             validSettings = settings;
+            mode = merchantCode === expectedSandboxCode ? 'sandbox' : 'live';
             break;
           }
         }
@@ -217,15 +222,15 @@ serve(async (req) => {
       webhookSecret = validSettings.webhook_secret;
       
     } else if (apiKey) {
-      // Simple API key authentication
+      // Simple API key authentication — the key itself decides the environment
       console.log('Using API key authentication');
       
       const { data: apiSettings, error: apiError } = await supabase
         .from('user_api_settings')
         .select('*, profiles(user_id, full_name)')
-        .eq('api_key', apiKey)
+        .or(`api_key.eq.${apiKey},sandbox_api_key.eq.${apiKey}`)
         .eq('is_active', true)
-        .single();
+        .maybeSingle();
 
       if (apiError || !apiSettings) {
         console.error('Invalid API key:', apiError);
@@ -238,6 +243,7 @@ serve(async (req) => {
         });
       }
 
+      mode = apiSettings.sandbox_api_key === apiKey ? 'sandbox' : 'live';
       userId = apiSettings.user_id;
       merchantName = apiSettings.profiles?.full_name || merchantName;
       webhookUrl = apiSettings.webhook_url;
@@ -252,6 +258,9 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+
+    console.log(`Environment mode: ${mode}`);
+
 
     // Detect payment type
     const paymentType = detectPaymentType(body);
