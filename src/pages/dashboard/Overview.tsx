@@ -70,15 +70,11 @@ export default function Overview() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user) {
-      fetchData();
-      subscribeToTransactions();
-    }
-  }, [user, isAdmin]);
+    if (!user) return;
+    fetchData();
 
-  const subscribeToTransactions = () => {
     const channel = supabase
-      .channel('overview-transactions')
+      .channel(`overview-transactions-${user.id}`)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'transactions' },
@@ -89,7 +85,9 @@ export default function Overview() {
     return () => {
       supabase.removeChannel(channel);
     };
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, isAdmin]);
+
 
   const fetchData = async () => {
     try {
