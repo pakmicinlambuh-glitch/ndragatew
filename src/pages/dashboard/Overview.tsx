@@ -93,13 +93,14 @@ export default function Overview() {
   const fetchData = async () => {
     try {
       // Fetch stats
-      let query = supabase.from('transactions').select('*');
+      let query = supabase.from('transactions').select('*').eq('mode', mode);
       
       if (!isAdmin) {
         query = query.eq('user_id', user?.id);
       }
 
       const { data: transactions, error } = await query;
+
 
       if (error) throw error;
 
