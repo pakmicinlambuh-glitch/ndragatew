@@ -208,7 +208,10 @@ export default function Overview() {
         </p>
       </div>
 
+      <RealtimeStatusPanel userId={user?.id} />
+
       {/* Widgets */}
+
       {widgets.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {widgets.slice(0, 3).map((widget) => (
